@@ -22,19 +22,23 @@ function secretMatches(sent: string | null, expected: string): boolean {
  * Real Opus Off-Platform webhook (spec 02 §6).
  *   POST /api/opus/webhook?node=hm_review_r1
  *   Header X-Valiram-Webhook-Secret: <OPUS_WEBHOOK_SECRET>
+ *   (or, if the node can't send headers: ...&secret=<OPUS_WEBHOOK_SECRET>; the header wins when both are sent)
  * Stores execution_id + callback (Opus never resends them), creates the task, answers 200 fast.
  * No user cookie: Opus is the caller.
  */
 export async function POST(req: Request) {
-  const node = new URL(req.url).searchParams.get("node") ?? "";
+  const url = new URL(req.url);
+  const node = url.searchParams.get("node") ?? "";
+  // Header first; `?secret=` is a fallback for when the Opus node can't send custom headers (spec 02 §4.1).
+  const sentSecret = req.headers.get(SECRET_HEADER) ?? url.searchParams.get("secret");
   return handle(async () => {
     const secret = process.env.OPUS_WEBHOOK_SECRET?.trim();
     if (opusIntegration() !== "on" || !secret) {
       console.error("[opus] webhook: integration not configured (OPUS_SERVICE_KEY, OPUS_CREATE_REQUISITION_WORKFLOW_ID, OPUS_WEBHOOK_SECRET).");
       throw new ApiError(503, "opus_not_configured", "The Opus integration is not configured.");
     }
-    if (!secretMatches(req.headers.get(SECRET_HEADER), secret)) {
-      console.error(`[opus] webhook node=${node || "(none)"}: missing or wrong secret header. Rejected with 401.`);
+    if (!secretMatches(sentSecret, secret)) {
+      console.error(`[opus] webhook node=${node || "(none)"}: missing or wrong secret (header or ?secret=). Rejected with 401.`);
       throw new ApiError(401, "unauthorized", "Missing or wrong webhook secret.");
     }
     if (!OPUS_NODES[node]) {

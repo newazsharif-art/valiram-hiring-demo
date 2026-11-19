@@ -49,7 +49,8 @@ This replaces the "stays in `AiPrecheck`" behaviour of spec 01 §8.3 for round 1
 | 3 | Other node inputs | As in the input mapping (§6.4). |
 | 4 | Node outputs | The 14 outputs in §7.1 (all nullable, as in the sample). |
 | 5 | Webhook URL | `https://<app-domain>/api/opus/webhook?node=hm_review_r1` (production Vercel domain; preview URLs change on every deploy). |
-| 6 | Webhook header | `X-Valiram-Webhook-Secret: <same value as OPUS_WEBHOOK_SECRET>`. |
+| 6 | Webhook secret | Header `X-Valiram-Webhook-Secret: <same value as OPUS_WEBHOOK_SECRET>`. **If the node can't send custom headers**, add it to the URL instead: `…/api/opus/webhook?node=hm_review_r1&secret=<OPUS_WEBHOOK_SECRET>` (§6.2 step 2). |
+| 6a | Vercel Deployment Protection (preview URLs) | Header `x-vercel-protection-bypass: <Protection Bypass for Automation secret>`, or without headers the query parameter `&x-vercel-protection-bypass=<secret>`. Vercel checks this before the app; a missing or wrong value returns Vercel's "Protected deployment" 401. |
 | 7 | Timeout | Keep the 15 s default. |
 | 8 | Publish the workflow | Then run one test case (§11). |
 
@@ -87,7 +88,7 @@ export const OPUS_NODES = {
 | # | Step | Failure response |
 | :--- | :--- | :--- |
 | 1 | Integration on (spec 01 env rule) | `503 opus_not_configured` (Opus retries; fix config within the retry window) |
-| 2 | `X-Valiram-Webhook-Secret` equals `OPUS_WEBHOOK_SECRET` (`crypto.timingSafeEqual`) | `401 unauthorized` |
+| 2 | The secret equals `OPUS_WEBHOOK_SECRET` (`crypto.timingSafeEqual` on SHA-256 hashes). Taken from the `X-Valiram-Webhook-Secret` header; if the header is absent, from the `secret` query parameter. The header wins when both are sent | `401 unauthorized` |
 | 3 | `node` is in `OPUS_NODES` | `400 unknown_node` |
 | 4 | Body matches `OpusOffPlatformPayloadSchema` (§6.5) | `400 invalid_payload` |
 | 5 | `workflow_id` equals `OPUS_CREATE_REQUISITION_WORKFLOW_ID` | `400 wrong_workflow` |
@@ -98,7 +99,8 @@ export const OPUS_NODES = {
 | 10 | `200 { "ok": true, "task_id": "T-…" }` | – |
 
 - No outbound calls before the `200`; only the store write.
-- Every rejection is logged with `console.error`: `node`, `execution_id`, `requisition_id` (if read) and the reason. The secret header and `callback.token` are **never** logged.
+- Every rejection is logged with `console.error`: `node`, `execution_id`, `requisition_id` (if read) and the reason. The secret (header or `?secret=`) and `callback.token` are **never** logged by the app.
+- The `?secret=` fallback puts the secret in the URL, where Vercel's request logs and the Opus run history can record it. It exists only because the Opus node currently can't send custom headers. Switch back to the header when Opus supports it, and rotate the secret if those logs are shared.
 
 ### 6.3 Correlation
 
@@ -328,7 +330,7 @@ The app keeps storing `Full-time` / `Part-time` and `YYYY-MM-DD` internally; con
 
 1. With the integration on, when Opus reaches the node, the hiring manager gets an open task "Revise requisition · <role>", and the requisition shows **Returned to HM, round 1**.
 2. The task screen shows the Message to Hiring Manager read only, with line breaks, and all other fields prefilled from the webhook (store name matched to the store, `Full time` shown as Full-time, `17/11/2026` shown as 17 Nov 2026).
-3. A wrong or missing secret header → `401`, nothing created.
+3. A wrong or missing secret (header, or `?secret=` when no header is sent) → `401`, nothing created.
 4. An unknown `node`, invalid body or other workflow ID → `400`, nothing created.
 5. A missing or unknown `requisition_id`, or a requisition with no Opus case → `422`, nothing created, the step fails in Opus.
 6. The same payload sent twice creates one task.
@@ -339,7 +341,7 @@ The app keeps storing `Full-time` / `Part-time` and `YYYY-MM-DD` internally; con
 9. Invalid form input (e.g. role not in the department, fewer than 3 duties) shows field errors, and Opus is not called.
 10. A spent token shows "This step is already closed in Opus" and closes the task.
 11. Create Requisition sends `Full time` / `Part time`, `DD/MM/YYYY` and the requisition ID (spec 01).
-12. `callback.token`, `callback.url` and the webhook secret appear in no API response, page or log.
+12. `callback.token`, `callback.url` and the webhook secret appear in no API response, page or app log line (with the `?secret=` fallback the URL itself still appears in Vercel's request logs, §6.2).
 13. With the integration off, the simulator behaves as today; `/api/opus/webhook` returns `503`. New requisition looks and works as before.
 14. `npm run lint` and `npx tsc --noEmit` pass.
 
@@ -355,4 +357,5 @@ The app keeps storing `Full-time` / `Part-time` and `YYYY-MM-DD` internally; con
 | 6 | Unknown requisition | `422`, step fails. |
 | 7 | `execution_id` | Different from the case ID. Stored from the payload (task + `opus_cases`) and used to call the callback API on submit (§7.3). |
 | 9 | Status after a successful submit | `WithHr` (round stays 1), set only after Opus answers `200` (§7.5). |
-| 8 | Opus organisation verification, Vercel Deployment Protection | Not tracked in this spec. |
+| 8 | Opus organisation verification | Not tracked in this spec. |
+| 10 | Opus node can't send custom headers (found while testing on the preview) | The app also accepts the secret as `?secret=`; Vercel's bypass secret goes in the URL as `x-vercel-protection-bypass=`. Header remains the preferred option. |
