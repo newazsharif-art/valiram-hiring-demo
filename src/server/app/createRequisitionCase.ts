@@ -10,15 +10,28 @@ import { ApiError } from "../service";
 
 type InputType = OpusPayloadValue["type"];
 
+/** App "Full-time" → Opus "Full time" (the format Opus also sends to the Off-Platform nodes, spec 02). */
+export function toOpusEmploymentType(v: string): string {
+  return v.replace(/-/g, " ");
+}
+
+/** App "YYYY-MM-DD" → Opus "DD/MM/YYYY" (spec 02 §9). Anything else is sent unchanged. */
+export function toOpusDate(v: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : v;
+}
+
+export const REQUISITION_ID_INPUT = "workflow_input_ws7sv258o";
+
 /** Opus input ID → front-end label, Opus type and value. A workflow change only touches this list. */
 export const CREATE_REQUISITION_INPUTS: { id: string; label: string; type: InputType; value: (r: Requisition) => string | number }[] = [
   { id: "workflow_input_78r0ypse6", label: "Department", type: "str", value: (r) => r.department },
   { id: "workflow_input_edauqmje5", label: "Role", type: "str", value: (r) => r.role },
   { id: "workflow_input_c2boa99wg", label: "Store", type: "str", value: (r) => r.store },
   { id: "workflow_input_pqsxw3kio", label: "Region", type: "str", value: (r) => r.region },
-  { id: "workflow_input_kqinwjdml", label: "Employment type", type: "str", value: (r) => r.employment_type },
+  { id: "workflow_input_kqinwjdml", label: "Employment type", type: "str", value: (r) => toOpusEmploymentType(r.employment_type) },
   { id: "workflow_input_0xzhza9py", label: "Openings", type: "float", value: (r) => r.openings },
-  { id: "workflow_input_128uhde7w", label: "Target Start Date", type: "date", value: (r) => r.target_start },
+  { id: "workflow_input_128uhde7w", label: "Target Start Date", type: "date", value: (r) => toOpusDate(r.target_start) },
   { id: "workflow_input_y7mukgkh9", label: "Base salary from", type: "float", value: (r) => r.base_min },
   { id: "workflow_input_al1kdjqqd", label: "Base salary to", type: "float", value: (r) => r.base_max },
   { id: "workflow_input_xl67jxp25", label: "About the role", type: "str", value: (r) => r.jd_sections.about },
@@ -26,6 +39,7 @@ export const CREATE_REQUISITION_INPUTS: { id: string; label: string; type: Input
   { id: "workflow_input_31tedhzgn", label: "What we look for", type: "str", value: (r) => r.jd_sections.requirements.join("\n") },
   { id: "workflow_input_s3qdueq3e", label: "Benefits", type: "str", value: (r) => r.jd_sections.benefits },
   { id: "workflow_input_caakchhja", label: "Shift pattern", type: "str", value: (r) => r.jd_sections.shift_pattern ?? "" },
+  { id: REQUISITION_ID_INPUT, label: "Requisition ID", type: "str", value: (r) => r.id },
 ];
 
 export function buildPayload(r: Requisition): OpusPayload {
@@ -35,6 +49,14 @@ export function buildPayload(r: Requisition): OpusPayload {
 }
 
 type Config = { enabled: false } | { enabled: true; workflowId: string };
+
+/** Integration state without throwing: used by the webhook receiver (spec 02 §6.2 step 1). */
+export function opusIntegration(): "off" | "on" | "misconfigured" {
+  const key = process.env.OPUS_SERVICE_KEY?.trim();
+  const workflowId = process.env.OPUS_CREATE_REQUISITION_WORKFLOW_ID?.trim();
+  if (!key && !workflowId) return "off";
+  return key && workflowId ? "on" : "misconfigured";
+}
 
 function config(): Config {
   const key = process.env.OPUS_SERVICE_KEY?.trim();

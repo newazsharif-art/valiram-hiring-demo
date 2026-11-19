@@ -19,6 +19,9 @@ import { nowIso, rawDb, resetDb, simDelayMs } from "./store";
 import { runPostingStep, runPrecheckStep, startFlow1b, submitRequisition, tick } from "./flows";
 import { dataMode, sendCallback } from "./app/callbackSender";
 import { startCreateRequisitionCase } from "./app/createRequisitionCase";
+import { buildHmReviewOutput } from "./app/opusNodes";
+import { opusResubmitted } from "./flows";
+import { RequisitionInputSchema } from "@/domain/schemas";
 
 export class ApiError extends Error {
   constructor(
@@ -180,9 +183,9 @@ export function getCandidates(u: User, reqId: string): Candidate[] {
 // ------------------------------------------------------------ tasks
 
 export function toPublicTask(t: TaskRecord): Task {
-  // Strip the callback (token stays server-side).
+  // Strip the callback (token stays server-side) and the server-only source flag.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { callback, ...rest } = t;
+  const { callback, source, ...rest } = t;
   return rest;
 }
 
@@ -240,6 +243,7 @@ export async function completeTask(u: User, id: string, output: Record<string, u
   const t = d.tasks.find((x) => x.id === id);
   if (!t || !canAct(u, t)) throw new ApiError(404, "not_found", `Task ${id} not found`);
   const r = d.requisitions.find((x) => x.id === t.requisition_id)!;
+  if (t.source === "opus") return completeOpusTask(d, t, r, output);
   if (t.status === "open") validateOutput(t, r, output);
   const roundAtDecision = r.round;
   const res = await sendCallback(d, t, { status: "success", output_data: output });
@@ -266,6 +270,61 @@ export async function completeTask(u: User, id: string, output: Record<string, u
     t.outcome_label = `${n} selected`;
     t.title = "Selected candidates · 70–89% band";
   }
+  return { task: toPublicTask(t), requisition: r };
+}
+
+const FIELD_LABELS: [keyof Requisition, string][] = [
+  ["department", "Department"],
+  ["role", "Role"],
+  ["store", "Store"],
+  ["employment_type", "Employment type"],
+  ["openings", "Openings"],
+  ["target_start", "Target start date"],
+  ["base_min", "Base salary from"],
+  ["base_max", "Base salary to"],
+];
+
+/**
+ * HM resubmits a task that came from the real Opus webhook (spec 02 §7).
+ * Body: { requisition: RequisitionInput, hm_note?: string }. The app builds the 14 bare outputs,
+ * sends them to the callback API of the task's execution_id, and only on 200 saves the changes
+ * and moves the requisition to With HR.
+ */
+async function completeOpusTask(d: Db, t: TaskRecord, r: Requisition, body: Record<string, unknown>) {
+  if (t.task_type !== "HM_JD_REVISE") throw new ApiError(400, "unsupported", "This Opus task type is not supported yet.");
+  if (t.status === "closed") throw new ApiError(401, "task_closed", "This step is already closed in Opus. Another user completed it, or the Opus job was cancelled. Nothing was sent.");
+  if (t.status === "done") throw new ApiError(409, "already_done", "This task was already submitted.");
+  const input = RequisitionInputSchema.parse(body.requisition);
+  const note = typeof body.hm_note === "string" ? body.hm_note.trim() : "";
+
+  // Build the requisition as it will be saved, without touching the stored one yet.
+  const next: Requisition = structuredClone(r);
+  applyInput(d, next, { ...input, copied_from: r.copied_from });
+  const output_data = buildHmReviewOutput(next);
+
+  const declared = Object.keys(t.expected_output_schema ?? {});
+  const undeclared = Object.keys(output_data).filter((k) => !declared.includes(k));
+  if (declared.length && undeclared.length) {
+    console.error(`[opus] callback task=${t.id} execution_id=${t.execution_id}: outputs not declared by the node: ${undeclared.join(", ")} | declared: ${declared.join(", ")}`);
+    throw new ApiError(500, "opus_schema_mismatch", "The Opus step doesn't accept these fields, so nothing was sent. Please contact your system administrator.");
+  }
+
+  const res = await sendCallback(d, t, { status: "success", output_data });
+  if (res.status === 401) {
+    t.status = "closed";
+    throw new ApiError(401, "task_closed", "This step is already closed in Opus. Another user completed it, or the Opus job was cancelled. Nothing was sent.");
+  }
+  if (res.status === 404) throw new ApiError(404, "no_such_execution", "Opus has no such execution.");
+  if (res.status === 422) throw new ApiError(422, res.body.error ?? "unprocessable", res.body.detail ?? "Opus rejected the output.");
+
+  const changed = FIELD_LABELS.filter(([k]) => r[k] !== next[k]).map(([, label]) => label);
+  const roundAtDecision = r.round;
+  opusResubmitted(r, next, t.assignee_name, note, changed);
+  t.status = "done";
+  t.completed_at = nowIso();
+  t.outcome = "resubmitted";
+  t.outcome_label = `Round ${roundAtDecision}`;
+  t.title = "Revised requisition · resubmitted";
   return { task: toPublicTask(t), requisition: r };
 }
 
@@ -322,7 +381,7 @@ export function demoAdvance(reqId: string) {
   const d = db();
   const r = d.requisitions.find((x) => x.id === reqId);
   if (!r) throw new ApiError(404, "not_found", `Requisition ${reqId} not found`);
-  if (r.status === "AiPrecheck" && d.opus_cases[r.id]) {
+  if (d.opus_cases[r.id] && (r.status === "AiPrecheck" || r.status === "ReturnedToHm" || r.status === "WithHr")) {
     throw new ApiError(
       409,
       "opus_driven",

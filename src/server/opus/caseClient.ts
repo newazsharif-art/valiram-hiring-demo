@@ -5,7 +5,7 @@
  */
 import "server-only";
 
-const TIMEOUT_MS = 10_000;
+export const TIMEOUT_MS = 10_000;
 
 export type OpusStep = "initiate" | "execute";
 /** bad_response = unreadable or incomplete answer; rejected = Opus answered but did not accept the request. */
@@ -32,7 +32,7 @@ export interface OpusPayloadValue {
 
 export type OpusPayload = Record<string, OpusPayloadValue>;
 
-function baseUrl(): string {
+export function baseUrl(): string {
   return (process.env.OPUS_BASE_URL || "https://operator.opus.com").replace(/\/+$/, "");
 }
 

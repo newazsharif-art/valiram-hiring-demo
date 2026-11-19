@@ -39,6 +39,8 @@ export interface OpusCaseRecord {
   case_id: string;
   /** ISO UTC; display in MYT. */
   created_at: string;
+  /** Opus execution IDs seen on Off-Platform webhooks for this case (spec 02). Not the case ID. */
+  execution_ids?: string[];
 }
 
 export interface Db {

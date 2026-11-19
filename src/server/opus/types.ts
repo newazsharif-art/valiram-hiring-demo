@@ -2,6 +2,7 @@
  * Contracts of the Opus Off-Platform Task / Review (context §3).
  * The simulator and a real Opus integration use the same shapes.
  */
+import { z } from "zod";
 import type { TaskType } from "@/domain/types";
 
 /** What Opus POSTs to the workspace webhook when a run pauses at an Off-Platform node. */
@@ -35,3 +36,24 @@ export interface JobAudit {
   running_node: string | null;
   failed_nodes: string[];
 }
+
+/**
+ * What the real Opus Off-Platform node POSTs to the app webhook (spec 02 §6.5).
+ * Inputs arrive flat, keyed by input ID: { "<id>": { "type": "str" | "float" | "date", "value": ... } }.
+ */
+const OpusValueSchema = z.object({ type: z.string(), value: z.unknown() }).passthrough();
+
+export const OpusOffPlatformPayloadSchema = z
+  .object({
+    execution_id: z.string().min(1),
+    workflow_id: z.string().min(1),
+    workflow_name: z.string(),
+    inputs: z.record(OpusValueSchema),
+    callback: z.object({ url: z.string().url(), token: z.string().min(1), token_header: z.string().min(1) }),
+    expected_output_schema: z
+      .record(z.object({ type: z.string(), is_nullable: z.boolean().optional() }).passthrough())
+      .default({}),
+  })
+  .passthrough();
+
+export type OpusOffPlatformPayload = z.infer<typeof OpusOffPlatformPayloadSchema>;

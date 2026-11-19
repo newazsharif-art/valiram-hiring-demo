@@ -104,9 +104,9 @@ Each payload entry has the Opus shape `{ "value": ..., "type": ..., "displayName
 | `workflow_input_edauqmje5` | Role | `role` | `str` | As entered |
 | `workflow_input_c2boa99wg` | Store | `store` | `str` | Store **name** (e.g. "KLIA2 Departures"), not `store_id` |
 | `workflow_input_pqsxw3kio` | Region | `region` | `str` | Region of the store, from Settings |
-| `workflow_input_kqinwjdml` | Employment type | `employment_type` | `str` | `Full-time` or `Part-time` |
+| `workflow_input_kqinwjdml` | Employment type | `employment_type` | `str` | `Full time` or `Part time` (the app stores `Full-time` / `Part-time`; same format Opus sends back, spec 02) |
 | `workflow_input_0xzhza9py` | Openings | `openings` | `float` | Number, e.g. `3` |
-| `workflow_input_128uhde7w` | Target Start Date | `target_start` | `date` | `YYYY-MM-DD` |
+| `workflow_input_128uhde7w` | Target Start Date | `target_start` | `date` | `DD/MM/YYYY`, e.g. `17/11/2026` (app stores `YYYY-MM-DD`; same format Opus sends back, spec 02) |
 | `workflow_input_y7mukgkh9` | Base salary from | `base_min` | `float` | RM per month, no separators, e.g. `1900` |
 | `workflow_input_al1kdjqqd` | Base salary to | `base_max` | `float` | RM per month, e.g. `2300` |
 | `workflow_input_xl67jxp25` | About the role | `jd_sections.about` | `str` | Trimmed text |
@@ -114,6 +114,7 @@ Each payload entry has the Opus shape `{ "value": ..., "type": ..., "displayName
 | `workflow_input_31tedhzgn` | What we look for | `jd_sections.requirements` | `str` | Points joined with `\n`, one per line |
 | `workflow_input_s3qdueq3e` | Benefits | `jd_sections.benefits` | `str` | Trimmed text |
 | `workflow_input_caakchhja` | Shift pattern | `jd_sections.shift_pattern` | `str` | Trimmed text; `""` if not given (optional field) |
+| `workflow_input_ws7sv258o` | Requisition ID | `id` | `str` | `REQ-YYMM-nnn`. Added by spec 02: Opus passes it to the Off-Platform review nodes so the webhook can find the requisition. |
 
 The values are built from the requisition **as it will be saved**: the same normalisation `applyInput()` does (trimmed text, empty list points removed, store and region resolved from Settings).
 
@@ -225,7 +226,7 @@ The Opus calls run inside `withStore()`, which serialises requests per instance,
 
 ## 10. Acceptance criteria
 
-1. With the three env vars set, submitting a new requisition creates one case in Opus for workflow `6576e72f-…`, titled `REQ-… · <role> · <store>`, with all 14 inputs filled as in §6.
+1. With the three env vars set, submitting a new requisition creates one case in Opus for workflow `6576e72f-…`, titled `REQ-… · <role> · <store>`, with all 15 inputs filled as in §6.
 2. Submitting a form opened with **Copy to new requisition** does the same, for a new REQ ID. Opening the copy form creates nothing.
 3. After a successful submit, `db.opus_cases["REQ-…"]` in Redis (`valiram:db`) holds the `case_id`.
 4. The `caseId` does not appear in any `/api/requisitions` or `/api/tasks` response, or anywhere in the UI.
@@ -249,5 +250,6 @@ The Opus calls run inside `withStore()`, which serialises requests per instance,
 | 3 | Case title and description | The proposed format is accepted: title `REQ-… · <role> · <store>`, description `Requisition REQ-… submitted by <HM name>` (§5.1). |
 | 4 | Orphaned cases (Initiate succeeded, Execute failed) | Accepted. The unexecuted case stays in Opus with no clean-up; the server log records its `caseId` (§8.1). |
 | 5 | Status after submit | Saved as `AiPrecheck`. With a real Opus case, the status is then only updated through the Opus Off-Platform webhook when the workflow is at a human review node; the simulated pre-check does not run (§8.3). |
+| 6 | Value formats (changed by spec 02) | Employment type `Full time` / `Part time` and Target Start Date `DD/MM/YYYY`, matching what Opus sends to the Off-Platform nodes. Requisition ID added as `workflow_input_ws7sv258o`. |
 
 No open questions remain.

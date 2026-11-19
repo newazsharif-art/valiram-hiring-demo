@@ -1,38 +1,23 @@
 "use client";
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  MenuItem,
-  TextField,
-  Typography,
-} from "@mui/material";
-import { EmploymentTypeSchema, RequisitionInputSchema } from "@/domain/schemas";
-import type { EmploymentType, Requisition, RequisitionInput } from "@/domain/types";
+import { Alert, Box, Button, Card, CardContent, Typography } from "@mui/material";
+import type { Requisition } from "@/domain/types";
 import { api, ApiClientError } from "@/lib/api";
 import { useApi, useSession } from "@/components/SessionProvider";
 import { ErrorNote, Loading, NextLink, PageHeader, SectionCard } from "@/components/ui";
-import { JdSectionsEditor, fromDraft, toDraft, type JdDraft, type JdKey } from "@/components/JdSectionsEditor";
+import { JdSectionsEditor } from "@/components/JdSectionsEditor";
+import {
+  EMPTY_FORM,
+  RequisitionFormFields,
+  formFromRequisition,
+  formToInput,
+  jdErrors,
+  validateForm,
+  type RequisitionForm,
+} from "@/components/RequisitionFormFields";
 
-interface Form {
-  department: string;
-  role: string;
-  store_id: string;
-  openings: string;
-  target_start: string;
-  base_min: string;
-  base_max: string;
-  employment_type: EmploymentType;
-  jd: JdDraft;
-}
-
-const EMPTY: Form = { department: "", role: "", store_id: "", openings: "1", target_start: "", base_min: "", base_max: "", employment_type: "Full-time", jd: toDraft(undefined) };
-
-const EXAMPLE: Form = {
+const EXAMPLE: RequisitionForm = {
   department: "Beauty & Fragrance",
   role: "Fragrance Specialist",
   store_id: "klia2",
@@ -50,29 +35,13 @@ const EXAMPLE: Form = {
   },
 };
 
-const num = (s: string) => Number(String(s).replace(/[,\s]/g, ""));
-
-function fromReq(r: Requisition): Form {
-  return {
-    department: r.department,
-    role: r.role,
-    store_id: r.store_id,
-    openings: String(r.openings),
-    target_start: r.target_start,
-    base_min: r.base_min ? r.base_min.toLocaleString("en-MY") : "",
-    base_max: r.base_max ? r.base_max.toLocaleString("en-MY") : "",
-    employment_type: r.employment_type,
-    jd: toDraft(r.jd_sections),
-  };
-}
-
 function NewRequisitionInner() {
   const params = useSearchParams();
   const router = useRouter();
   const copyFrom = params.get("copy");
   const { user, bump } = useSession();
   const settings = useApi(() => api.settings.get(), []);
-  const [form, setForm] = useState<Form>(EMPTY);
+  const [form, setForm] = useState<RequisitionForm>(EMPTY_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Requisition | null>(null);
@@ -82,16 +51,14 @@ function NewRequisitionInner() {
     if (!copyFrom) return;
     api.requisitions
       .get(copyFrom)
-      .then((r) => setForm(fromReq(r)))
+      .then((r) => setForm(formFromRequisition(r)))
       .catch((e: Error) => setError(e.message));
   }, [copyFrom]);
 
   if (settings.error) return <ErrorNote error={settings.error} />;
   if (!settings.data) return <Loading />;
   const s = settings.data;
-  const dept = s.departments.find((d) => d.name === form.department);
-  const store = s.stores.find((x) => x.id === form.store_id);
-  const set = (patch: Partial<Form>) => setForm((f) => ({ ...f, ...patch }));
+  const set = (patch: Partial<RequisitionForm>) => setForm((f) => ({ ...f, ...patch }));
 
   if (user.role !== "HIRING_MANAGER") {
     return (
@@ -102,27 +69,12 @@ function NewRequisitionInner() {
     );
   }
 
-  const toInput = (): RequisitionInput => ({
-    department: form.department,
-    role: form.role,
-    store_id: form.store_id,
-    openings: Math.trunc(num(form.openings) || 0),
-    base_min: num(form.base_min) || 0,
-    base_max: num(form.base_max) || 0,
-    employment_type: form.employment_type,
-    target_start: form.target_start,
-    jd: fromDraft(form.jd),
-    copied_from: copyFrom ?? undefined,
-  });
-
   const submit = async () => {
     setError(undefined);
     setResult(null);
-    const input = toInput();
-    const parsed = RequisitionInputSchema.safeParse(input);
-    if (!parsed.success) {
-      const errs: Record<string, string> = {};
-      for (const i of parsed.error.issues) errs[i.path[i.path.length - 1] as string] ??= i.message;
+    const input = formToInput(form, copyFrom ?? undefined);
+    const errs = validateForm(input);
+    if (Object.keys(errs).length) {
       setErrors(errs);
       setError("Please fix the highlighted fields.");
       return;
@@ -133,7 +85,7 @@ function NewRequisitionInner() {
       const r = await api.requisitions.create(input);
       bump();
       setResult(r);
-      setForm(EMPTY);
+      setForm(EMPTY_FORM);
       if (copyFrom) router.replace("/requisitions/new");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
@@ -143,13 +95,6 @@ function NewRequisitionInner() {
     } finally {
       setBusy(false);
     }
-  };
-
-  const jdErrors: Partial<Record<JdKey, string>> = {
-    about: errors.about,
-    duties: errors.duties,
-    requirements: errors.requirements,
-    benefits: errors.benefits,
   };
 
   return (
@@ -184,108 +129,7 @@ function NewRequisitionInner() {
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1fr) 340px" }, gap: 3, alignItems: "start" }}>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
           <SectionCard title="Role details">
-            <CardContent sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 2 }}>
-              <TextField
-                select
-                required
-                label="Department"
-                value={form.department}
-                onChange={(e) => set({ department: e.target.value, role: "" })}
-                error={!!errors.department}
-                helperText={errors.department ?? "Required"}
-              >
-                {s.departments.filter((d) => d.active).map((d) => (
-                  <MenuItem key={d.id} value={d.name}>
-                    {d.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <TextField
-                select
-                required
-                label="Role"
-                value={form.role}
-                onChange={(e) => set({ role: e.target.value })}
-                disabled={!dept}
-                error={!!errors.role}
-                helperText={errors.role ?? (dept ? "Roles under the chosen department" : "Choose a department first")}
-              >
-                {(dept?.roles ?? []).map((r) => (
-                  <MenuItem key={r} value={r}>
-                    {r}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <TextField
-                select
-                required
-                label="Store"
-                value={form.store_id}
-                onChange={(e) => set({ store_id: e.target.value })}
-                error={!!errors.store_id}
-                helperText={errors.store_id ?? (store ? `Region fills in: ${store.region}` : "Region fills in from the store")}
-              >
-                {s.stores.filter((x) => x.active).map((x) => (
-                  <MenuItem key={x.id} value={x.id}>
-                    {x.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <TextField label="Region" value={store?.region ?? ""} slotProps={{ input: { readOnly: true } }} helperText="From Settings · Stores & regions" />
-              <TextField
-                select
-                required
-                label="Employment type"
-                value={form.employment_type}
-                onChange={(e) => set({ employment_type: e.target.value as EmploymentType })}
-                error={!!errors.employment_type}
-                helperText={errors.employment_type}
-              >
-                {EmploymentTypeSchema.options.map((t) => (
-                  <MenuItem key={t} value={t}>
-                    {t}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <TextField
-                required
-                label="Openings"
-                type="number"
-                value={form.openings}
-                onChange={(e) => set({ openings: e.target.value })}
-                error={!!errors.openings}
-                helperText={errors.openings}
-                slotProps={{ htmlInput: { min: 1 } }}
-              />
-              <TextField
-                required
-                label="Target start date"
-                type="date"
-                value={form.target_start}
-                onChange={(e) => set({ target_start: e.target.value })}
-                error={!!errors.target_start}
-                helperText={errors.target_start}
-                slotProps={{ inputLabel: { shrink: true } }}
-              />
-              <TextField
-                required
-                label="Base salary from (RM / month)"
-                value={form.base_min}
-                onChange={(e) => set({ base_min: e.target.value })}
-                error={!!errors.base_min}
-                helperText={errors.base_min}
-                slotProps={{ htmlInput: { inputMode: "numeric" } }}
-              />
-              <TextField
-                required
-                label="Base salary to (RM / month)"
-                value={form.base_max}
-                onChange={(e) => set({ base_max: e.target.value })}
-                error={!!errors.base_max}
-                helperText={errors.base_max}
-                slotProps={{ htmlInput: { inputMode: "numeric" } }}
-              />
-            </CardContent>
+            <RequisitionFormFields form={form} onChange={set} errors={errors} settings={s} />
           </SectionCard>
 
           <SectionCard title="Job description">
@@ -293,7 +137,7 @@ function NewRequisitionInner() {
               <Alert severity="info" icon={false}>
                 Job title, store, salary range and employment type come from Role details above. Opus adds them to every posting, so don&apos;t repeat them here.
               </Alert>
-              <JdSectionsEditor value={form.jd} onChange={(jd) => set({ jd })} howToApply={s.template.how_to_apply} errors={jdErrors} idPrefix="s" />
+              <JdSectionsEditor value={form.jd} onChange={(jd) => set({ jd })} howToApply={s.template.how_to_apply} errors={jdErrors(errors)} idPrefix="s" />
             </CardContent>
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, justifyContent: "flex-end", p: 2, borderTop: 1, borderColor: "divider" }}>
               <Button variant="contained" disabled={busy} onClick={submit}>

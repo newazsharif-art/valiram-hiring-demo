@@ -132,6 +132,55 @@ function returnToHm(db: Db, r: Requisition, findings: unknown[], hrComments: str
   });
 }
 
+// ------------------------------------------------------------------ real Opus (spec 02)
+
+/**
+ * The real Opus run paused at an HM review node after the AI pre-check: record the pre-check result
+ * and move the requisition to ReturnedToHm. Unlike returnToHm(), no simulator job is touched; the
+ * task itself was created from the webhook.
+ */
+export function opusReturnToHm(r: Requisition, round: number, message: string, taskId: string, hmName: string, nodeLabel: string) {
+  const rv = r.reviews.find((x) => x.round === round) ?? (r.reviews.push({ round, outcome: "pending" }), r.reviews[r.reviews.length - 1]);
+  rv.precheck = {
+    pass: false,
+    at: nowIso(),
+    findings: message.trim() ? [{ code: "opus_message", result: "fail", title: "Message to Hiring Manager", detail: message.trim() }] : [],
+  };
+  rv.outcome = "returned";
+  r.status = "ReturnedToHm";
+  mark(r, "ReturnedToHm");
+  log(r, `AI pre-check round ${round} needs changes. Returned to hiring manager.`);
+  log(r, `Opus paused at ${nodeLabel}; task ${taskId} assigned to ${hmName}.`);
+}
+
+/**
+ * The HM's changes were accepted by Opus (callback 200): save them and move the requisition to
+ * With HR. The round stays the same; the HR task arrives through the next webhook.
+ */
+export function opusResubmitted(r: Requisition, next: Requisition, actor: string, note: string, changed: string[]) {
+  const t = nowIso();
+  const round = r.round;
+  const rv = r.reviews.find((x) => x.round === round) ?? (r.reviews.push({ round, outcome: "returned" }), r.reviews[r.reviews.length - 1]);
+  rv.hm = { by: actor, at: t, note: note || undefined };
+  r.department = next.department;
+  r.role = next.role;
+  r.store_id = next.store_id;
+  r.store = next.store;
+  r.region = next.region;
+  r.openings = next.openings;
+  r.base_min = next.base_min;
+  r.base_max = next.base_max;
+  r.employment_type = next.employment_type;
+  r.target_start = next.target_start;
+  r.jd_sections = next.jd_sections;
+  r.template_version = next.template_version;
+  r.versions.push({ version: r.versions.length + 1, by: actor, by_role: "HM", at: t, change: `Revised after round ${round}${note ? `: ${note}` : ""}`, sections: next.jd_sections });
+  r.status = "WithHr";
+  mark(r, "WithHr");
+  log(r, `${actor} resubmitted (v${r.versions.length}). Sent to Opus; the requisition is now with HR.`);
+  if (changed.length) log(r, `Changed: ${changed.join(", ")}.`);
+}
+
 function rejectRequisition(db: Db, r: Requisition) {
   const job = job1(db, r);
   enterNode(job, "n_reject");

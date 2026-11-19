@@ -64,6 +64,8 @@ export interface TaskCallback {
 
 export interface TaskRecord extends Task {
   callback: TaskCallback;
+  /** "opus" = delivered by the real Opus webhook (spec 02); "sim" or missing = the simulator. Server-only. */
+  source?: "opus" | "sim";
 }
 
 export const MAX_ROUNDS = 3;
