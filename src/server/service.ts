@@ -18,6 +18,7 @@ import type { Db } from "./store";
 import { nowIso, rawDb, resetDb, simDelayMs } from "./store";
 import { runPostingStep, runPrecheckStep, startFlow1b, submitRequisition, tick } from "./flows";
 import { dataMode, sendCallback } from "./app/callbackSender";
+import { startCreateRequisitionCase } from "./app/createRequisitionCase";
 
 export class ApiError extends Error {
   constructor(
@@ -106,7 +107,28 @@ function applyInput(d: Db, r: Requisition, input: RequisitionInput) {
   r.updated_at = nowIso();
 }
 
-export function createRequisition(u: User, input: RequisitionInput): Requisition {
+/**
+ * Submit path shared by create and draft-submit (spec 01): start the real Opus case first, and only
+ * if it succeeds commit the requisition, start the simulated Flow 1 and save the case ID.
+ * `commit` writes the requisition to the store; on an Opus failure it never runs.
+ */
+async function submitWithOpusCase(d: Db, r: Requisition, u: User, commit: () => Requisition): Promise<Requisition> {
+  const opusCase = await startCreateRequisitionCase(r, u);
+  const saved = commit();
+  submitRequisition(d, saved, u);
+  if (opusCase) {
+    d.opus_cases[saved.id] = {
+      requisition_id: saved.id,
+      flow: "create_requisition",
+      workflow_id: opusCase.workflowId,
+      case_id: opusCase.caseId,
+      created_at: nowIso(),
+    };
+  }
+  return saved;
+}
+
+export async function createRequisition(u: User, input: RequisitionInput): Promise<Requisition> {
   if (u.role !== "HIRING_MANAGER") throw new ApiError(403, "forbidden", "Only hiring managers create requisitions");
   const d = db();
   const t = nowIso();
@@ -138,29 +160,39 @@ export function createRequisition(u: User, input: RequisitionInput): Requisition
     screening: "not_open",
   };
   applyInput(d, r, input);
+  if (input.action === "submit") {
+    return submitWithOpusCase(d, r, u, () => {
+      d.requisitions.push(r);
+      return r;
+    });
+  }
   d.requisitions.push(r);
-  if (input.action === "submit") submitRequisition(d, r, u);
-  else r.activity.push({ at: t, text: `Draft saved by ${u.name}.` });
+  r.activity.push({ at: t, text: `Draft saved by ${u.name}.` });
   return r;
 }
 
-export function updateDraft(u: User, id: string, input: RequisitionInput): Requisition {
+export async function updateDraft(u: User, id: string, input: RequisitionInput): Promise<Requisition> {
   const d = db();
   const r = getRequisition(u, id);
   if (r.hm_user !== u.id) throw new ApiError(403, "forbidden", "Only the hiring manager can edit this draft");
   if (r.status !== "Draft") throw new ApiError(409, "not_draft", "Only drafts can be edited");
+  if (input.action === "submit") {
+    // Work on a copy so a failed Opus call leaves the stored draft unchanged.
+    const next = structuredClone(r);
+    applyInput(d, next, input);
+    return submitWithOpusCase(d, next, u, () => Object.assign(r, next));
+  }
   applyInput(d, r, input);
-  if (input.action === "submit") submitRequisition(d, r, u);
-  else r.activity.push({ at: nowIso(), text: `Draft saved by ${u.name}.` });
+  r.activity.push({ at: nowIso(), text: `Draft saved by ${u.name}.` });
   return r;
 }
 
 /** "Copy to new requisition": a new Draft with the same fields and latest JD; fresh Flow 1 with 3 rounds on submit. */
-export function copyRequisition(u: User, id: string): Requisition {
+export async function copyRequisition(u: User, id: string): Promise<Requisition> {
   const d = db();
   const src = getRequisition(u, id);
   if (u.role !== "HIRING_MANAGER" || src.hm_user !== u.id) throw new ApiError(403, "forbidden", "Only the requisition's hiring manager can copy it");
-  const r = createRequisition(u, {
+  const r = await createRequisition(u, {
     action: "draft",
     department: src.department,
     role: src.role,

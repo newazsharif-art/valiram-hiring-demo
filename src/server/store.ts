@@ -31,6 +31,16 @@ export interface SimEvent {
   reqId: string;
 }
 
+/** A real Opus case started by the app (spec 01). Server-only: never returned to the browser. */
+export interface OpusCaseRecord {
+  requisition_id: string;
+  flow: "create_requisition";
+  workflow_id: string;
+  case_id: string;
+  /** ISO UTC; display in MYT. */
+  created_at: string;
+}
+
 export interface Db {
   requisitions: Requisition[];
   candidates: Candidate[];
@@ -42,6 +52,8 @@ export interface Db {
   events: SimEvent[];
   demo: { precheck_mode: "auto" | "pass" | "fail" };
   seq: { task: number };
+  /** Real Opus cases started by the app, keyed by requisition ID. */
+  opus_cases: Record<string, OpusCaseRecord>;
 }
 
 function seedJobs(reqs: Requisition[], tasks: TaskRecord[]): Record<string, SimJob> {
@@ -101,6 +113,7 @@ export function seed(): Db {
     events: [],
     demo: { precheck_mode: "auto" },
     seq: { task: tasks.length },
+    opus_cases: {},
   };
 }
 
@@ -147,6 +160,7 @@ export function withStore<T>(fn: () => T | Promise<T>): Promise<T> {
   if (!r) return Promise.resolve().then(fn);
   const run = async () => {
     g.__valiramDb = (await r.get<Db>(DB_KEY)) ?? seed();
+    g.__valiramDb.opus_cases ??= {}; // Db saved before spec 01
     const before = JSON.stringify(g.__valiramDb);
     try {
       return await fn();

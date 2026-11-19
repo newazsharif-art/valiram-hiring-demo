@@ -149,6 +149,8 @@ src/server/
 src/app/api/...    route handlers
 ```
 
+**Already connected:** submitting a requisition creates a real Opus case for the "Create Requisition" workflow (v1 Case API, initiate + execute) when `OPUS_SERVICE_KEY` and `OPUS_CREATE_REQUISITION_WORKFLOW_ID` are set. The case ID is kept server-side in `db.opus_cases` (in Redis on Vercel). If Opus can't be reached or rejects the request, the requisition is not submitted and the user sees a plain-language error. The simulator still drives the rest of the demo flow. See `specs/01-OpusIntegration-CreateRequisition.md`.
+
 To connect real Opus (`DATA_MODE=opus`):
 
 1. **Opus client.** Implement `startJob` / status / audit / results against the Jobs or Case API with the `x-service-key` header (`OPUS_BASE_URL`, `OPUS_SERVICE_KEY`; keep it server-side only). Call it where `flows.ts` calls `startJob` for submit and for screening closed. Map `audit.running_node` to stage labels using Settings → Opus step mapping. The app records timestamps itself, because Opus audit has none.
