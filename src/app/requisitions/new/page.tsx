@@ -11,8 +11,8 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { RequisitionInputSchema } from "@/domain/schemas";
-import type { Requisition, RequisitionInput } from "@/domain/types";
+import { EmploymentTypeSchema, RequisitionInputSchema } from "@/domain/schemas";
+import type { EmploymentType, Requisition, RequisitionInput } from "@/domain/types";
 import { api, ApiClientError } from "@/lib/api";
 import { useApi, useSession } from "@/components/SessionProvider";
 import { ErrorNote, Loading, NextLink, PageHeader, SectionCard } from "@/components/ui";
@@ -26,10 +26,11 @@ interface Form {
   target_start: string;
   base_min: string;
   base_max: string;
+  employment_type: EmploymentType;
   jd: JdDraft;
 }
 
-const EMPTY: Form = { department: "", role: "", store_id: "", openings: "1", target_start: "", base_min: "", base_max: "", jd: toDraft(undefined) };
+const EMPTY: Form = { department: "", role: "", store_id: "", openings: "1", target_start: "", base_min: "", base_max: "", employment_type: "Full-time", jd: toDraft(undefined) };
 
 const EXAMPLE: Form = {
   department: "Beauty & Fragrance",
@@ -39,6 +40,7 @@ const EXAMPLE: Form = {
   target_start: "2027-01-04",
   base_min: "1,900",
   base_max: "2,300",
+  employment_type: "Full-time",
   jd: {
     about: "Help travellers find the perfect fragrance or gift before their flight in our duty-free store at KLIA2, Pier L.",
     duties: "Welcome and advise international travellers\nMeet personal and store sales targets\nKeep displays and stock in order; support stock counts",
@@ -59,6 +61,7 @@ function fromReq(r: Requisition): Form {
     target_start: r.target_start,
     base_min: r.base_min ? r.base_min.toLocaleString("en-MY") : "",
     base_max: r.base_max ? r.base_max.toLocaleString("en-MY") : "",
+    employment_type: r.employment_type,
     jd: toDraft(r.jd_sections),
   };
 }
@@ -114,6 +117,7 @@ function NewRequisitionInner() {
     openings: Math.trunc(num(form.openings) || 0),
     base_min: num(form.base_min) || 0,
     base_max: num(form.base_max) || 0,
+    employment_type: form.employment_type,
     target_start: form.target_start,
     jd: fromDraft(form.jd),
     copied_from: draft?.copied_from,
@@ -249,6 +253,21 @@ function NewRequisitionInner() {
                 ))}
               </TextField>
               <TextField label="Region" value={store?.region ?? ""} slotProps={{ input: { readOnly: true } }} helperText="From Settings · Stores & regions" />
+              <TextField
+                select
+                required
+                label="Employment type"
+                value={form.employment_type}
+                onChange={(e) => set({ employment_type: e.target.value as EmploymentType })}
+                error={!!errors.employment_type}
+                helperText={errors.employment_type}
+              >
+                {EmploymentTypeSchema.options.map((t) => (
+                  <MenuItem key={t} value={t}>
+                    {t}
+                  </MenuItem>
+                ))}
+              </TextField>
               <TextField
                 required
                 label="Openings"

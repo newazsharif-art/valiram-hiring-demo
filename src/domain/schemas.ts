@@ -18,6 +18,8 @@ export const RequisitionStatusSchema = z.enum([
   "Rejected",
 ]);
 
+export const EmploymentTypeSchema = z.enum(["Full-time", "Part-time"]);
+
 export const JdSectionsSchema = z.object({
   about: z.string(),
   duties: z.array(z.string()),
@@ -90,7 +92,7 @@ export const RequisitionSchema = z.object({
   openings: z.number(),
   base_min: z.number(),
   base_max: z.number(),
-  employment_type: z.string(),
+  employment_type: EmploymentTypeSchema,
   target_start: z.string(),
   hm_user: z.string(),
   hm_name: z.string(),
@@ -268,6 +270,7 @@ export const RequisitionInputSchema = z
     openings: z.number().int(),
     base_min: z.number(),
     base_max: z.number(),
+    employment_type: EmploymentTypeSchema,
     target_start: z.string(),
     jd: JdInputSchema,
     copied_from: z.string().optional(),

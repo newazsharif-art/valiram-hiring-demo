@@ -90,6 +90,7 @@ function applyInput(d: Db, r: Requisition, input: RequisitionInput) {
   r.openings = input.openings;
   r.base_min = input.base_min;
   r.base_max = input.base_max;
+  r.employment_type = input.employment_type;
   r.target_start = input.target_start;
   r.copied_from = input.copied_from ?? r.copied_from;
   const sections: JdSections = {
@@ -167,6 +168,7 @@ export function copyRequisition(u: User, id: string): Requisition {
     openings: src.openings,
     base_min: src.base_min,
     base_max: src.base_max,
+    employment_type: src.employment_type,
     target_start: src.target_start,
     jd: { ...src.jd_sections },
     copied_from: src.id,

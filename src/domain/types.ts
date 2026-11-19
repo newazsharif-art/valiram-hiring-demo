@@ -7,6 +7,7 @@ import type {
   ConnectionSchema,
   DemoStateSchema,
   DepartmentSchema,
+  EmploymentTypeSchema,
   FindingSchema,
   JdInputSchema,
   JdSectionsSchema,
@@ -28,6 +29,7 @@ import type {
 } from "./schemas";
 
 export type Role = z.infer<typeof RoleSchema>;
+export type EmploymentType = z.infer<typeof EmploymentTypeSchema>;
 export type RequisitionStatus = z.infer<typeof RequisitionStatusSchema>;
 export type JdSections = z.infer<typeof JdSectionsSchema>;
 export type Finding = z.infer<typeof FindingSchema>;
