@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { handle } from "@/server/http";
 import type { Db, OpusWebhookLogEntry } from "@/server/store";
 import { nowIso } from "@/server/store";
+import { safeHeaders } from "@/server/app/webhookLog";
 import { ApiError, db } from "@/server/service";
 import { OpusOffPlatformPayloadSchema } from "@/server/opus/types";
 import { OPUS_NODES } from "@/server/app/opusNodes";
@@ -22,21 +23,12 @@ function secretMatches(sent: string | null, expected: string): boolean {
 
 const MASK = "***";
 const SECRET_PARAMS = ["secret", "x-vercel-protection-bypass"];
-const SECRET_HEADERS = [SECRET_HEADER, "x-vercel-protection-bypass", "authorization", "cookie", "x-service-key"];
 const LOG_SIZE = 20;
 
 function maskedUrl(url: URL): string {
   const u = new URL(url.toString());
   for (const k of SECRET_PARAMS) if (u.searchParams.has(k)) u.searchParams.set(k, MASK);
   return `${u.pathname}${u.search}`;
-}
-
-function maskedHeaders(req: Request): Record<string, string> {
-  const out: Record<string, string> = {};
-  req.headers.forEach((v, k) => {
-    out[k] = SECRET_HEADERS.includes(k.toLowerCase()) ? MASK : v;
-  });
-  return out;
 }
 
 function maskedBody(text: string): unknown {
@@ -67,7 +59,7 @@ export async function POST(req: Request) {
   return handle(async () => {
     const d = db();
     // Record every request (also rejected ones) so the received payload can be inspected: GET /api/opus/webhook/log.
-    const entry: OpusWebhookLogEntry = { at: nowIso(), url: maskedUrl(url), headers: maskedHeaders(req), body: maskedBody(text), status: 0, result: "" };
+    const entry: OpusWebhookLogEntry = { at: nowIso(), url: maskedUrl(url), headers: safeHeaders(Object.fromEntries(req.headers)), body: maskedBody(text), status: 0, result: "" };
     d.opus_webhook_log = [entry, ...(d.opus_webhook_log ?? [])].slice(0, LOG_SIZE);
     try {
       const out = receive(d, node, sentSecret, text);

@@ -1,5 +1,6 @@
 import { currentUser, handle } from "@/server/http";
 import { ApiError, db } from "@/server/service";
+import { safeHeaders } from "@/server/app/webhookLog";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ export async function GET() {
   const u = await currentUser();
   return handle(() => {
     if (u.role === "HIRING_MANAGER") throw new ApiError(403, "forbidden", "Switch to an HR user to view the webhook log.");
-    return db().opus_webhook_log ?? [];
+    // Filter again on read, so entries stored before the allowlist existed are hidden too.
+    return (db().opus_webhook_log ?? []).map((e) => ({ ...e, headers: safeHeaders(e.headers) }));
   });
 }
