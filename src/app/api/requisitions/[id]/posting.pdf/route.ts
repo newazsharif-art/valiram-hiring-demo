@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { currentUser } from "@/server/http";
 import { ApiError, getRequisition } from "@/server/service";
 import { buildJobPostPdf } from "@/server/pdf";
+import { withStore } from "@/server/store";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { id } = await params;
   const u = await currentUser();
   try {
-    const r = getRequisition(u, id);
+    const r = await withStore(() => getRequisition(u, id));
     if (!r.posting) throw new ApiError(404, "no_posting", "No job posting yet: the JD is not live.");
     const bytes = await buildJobPostPdf(r);
     const download = new URL(req.url).searchParams.get("download") === "1";

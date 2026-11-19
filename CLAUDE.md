@@ -19,7 +19,7 @@ npm run build && npm start
 
 There is no test suite. Verify changes with lint + typecheck and by driving the app (Presenter panel at `/demo` resets data and triggers simulator actions).
 
-Env (`.env.example` → `.env.local`): `DATA_MODE` (`mock` only; `opus` not built), `SIM_DELAY_MS` (delay of simulated pre-check / posting, default 2500), `NEXT_PUBLIC_SHOW_SOURCES`.
+Env (`.env.example` → `.env.local`): `DATA_MODE` (`mock` only; `opus` not built), `SIM_DELAY_MS` (delay of simulated pre-check / posting, default 2500), `NEXT_PUBLIC_SHOW_SOURCES`, optional `KV_REST_API_URL`/`KV_REST_API_TOKEN` (Redis persistence; required on Vercel).
 
 ## Architecture
 
@@ -32,7 +32,7 @@ Layering — keep it intact, since each layer maps to a part of the future real 
 - `src/server/flows.ts` — workflow behaviour that in production runs **inside Opus** (pre-check, posting, score banding, round counting, round-3 rejection). The app side should only react to tasks/audit.
 - `src/server/opus/simulator.ts` — the Opus side: jobs, `pauseOffPlatform()` (emits an Off-Platform webhook payload), `receiveCallback()` (enforces single-use token → 401, unknown → 404, undeclared field or wrapped `{value,type}` value → 422), `getAudit()` (no timestamps, like real Opus).
 - `src/server/app/webhook.ts` / `callbackSender.ts` — the app side of the Off-Platform contract (`opus/types.ts`): turn a payload into a `TaskRecord`; send the callback (simulator in mock mode). Callback tokens stay server-side; `toPublicTask()` strips them.
-- `src/server/store.ts` — in-memory DB on `globalThis` (shared across route bundles and hot reload); restart or `/demo` reset restores seed state.
+- `src/server/store.ts` — in-memory DB on `globalThis` (shared across route bundles and hot reload); restart or `/demo` reset restores seed state. If `KV_REST_API_URL`/`KV_REST_API_TOKEN` are set (Vercel + Upstash), `withStore()` loads the whole Db from Redis per request and saves it if changed. Every route must run its store access inside `withStore()` — `handle()` does this; routes that don't use `handle()` must wrap themselves.
 
 **Simulated time:** there are no timers on the server. Async Opus steps are queued in `db.events` with a due time and executed by `tick()` at the start of the next API request. The UI polls (`useApi(..., { pollMs })` in `src/components/SessionProvider.tsx`) so pages advance on their own.
 

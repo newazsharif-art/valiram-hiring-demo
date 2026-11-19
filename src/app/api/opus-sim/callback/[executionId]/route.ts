@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/server/service";
+import { withStore } from "@/server/store";
 import { receiveCallback } from "@/server/opus/simulator";
 import type { CallbackBody } from "@/server/opus/types";
 
@@ -18,13 +19,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ executi
   } catch {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
-  const d = db();
-  const open = d.tasks.find((x) => x.execution_id === executionId && x.status === "open");
-  const res = receiveCallback(d, executionId, req.headers.get("x-opus-callback-token"), body);
-  if (res.status === 200 && open) {
-    open.status = "done";
-    open.completed_at = new Date().toISOString();
-    open.outcome_label = "Completed via callback";
-  }
+  const res = await withStore(() => {
+    const d = db();
+    const open = d.tasks.find((x) => x.execution_id === executionId && x.status === "open");
+    const out = receiveCallback(d, executionId, req.headers.get("x-opus-callback-token"), body);
+    if (out.status === 200 && open) {
+      open.status = "done";
+      open.completed_at = new Date().toISOString();
+      open.outcome_label = "Completed via callback";
+    }
+    return out;
+  });
   return NextResponse.json(res.body, { status: res.status });
 }

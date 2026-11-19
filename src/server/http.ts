@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import type { User } from "@/domain/types";
 import { ApiError, userById } from "./service";
+import { withStore } from "./store";
 
 export const USER_COOKIE = "vh_user";
 
@@ -15,7 +16,7 @@ export async function currentUser(): Promise<User> {
 
 export async function handle(fn: () => unknown | Promise<unknown>, init?: { status?: number }) {
   try {
-    const data = await fn();
+    const data = await withStore(fn);
     return NextResponse.json(data, { status: init?.status ?? 200 });
   } catch (e) {
     if (e instanceof ApiError) {

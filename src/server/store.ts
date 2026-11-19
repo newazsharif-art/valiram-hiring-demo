@@ -4,6 +4,7 @@
  * (context §5.1: Azure SQL or Postgres).
  */
 import "server-only";
+import { Redis } from "@upstash/redis";
 import type { Candidate, Requisition, Settings, TaskRecord, TaskType } from "@/domain/types";
 import { seedCandidates, seedRequisitions, seedSettings, seedTasks } from "@/domain/fixtures";
 
@@ -114,6 +115,49 @@ export function rawDb(): Db {
 export function resetDb(): Db {
   g.__valiramDb = seed();
   return g.__valiramDb;
+}
+
+// ------------------------------------------------------------ optional persistence (Vercel)
+
+/**
+ * On serverless hosting (Vercel) instances don't share memory and reset on cold start, so the
+ * whole Db is kept as one JSON value in Upstash Redis when its REST env vars are set.
+ * Without them (local dev) the store stays purely in memory.
+ */
+const DB_KEY = "valiram:db";
+let client: Redis | null | undefined;
+
+function redis(): Redis | null {
+  if (client !== undefined) return client;
+  const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
+  client = url && token ? new Redis({ url, token }) : null;
+  return client;
+}
+
+let queue: Promise<unknown> = Promise.resolve();
+
+/**
+ * Run one request against the store. With Redis: load the Db, run `fn`, save it back if it changed.
+ * Requests are serialised per instance so concurrent ones don't swap the global Db under each other.
+ * Across instances it is last-write-wins, which is fine for a presenter-driven demo.
+ */
+export function withStore<T>(fn: () => T | Promise<T>): Promise<T> {
+  const r = redis();
+  if (!r) return Promise.resolve().then(fn);
+  const run = async () => {
+    g.__valiramDb = (await r.get<Db>(DB_KEY)) ?? seed();
+    const before = JSON.stringify(g.__valiramDb);
+    try {
+      return await fn();
+    } finally {
+      const after = JSON.stringify(g.__valiramDb);
+      if (after !== before) await r.set(DB_KEY, after);
+    }
+  };
+  const p = queue.then(run, run);
+  queue = p.catch(() => undefined);
+  return p;
 }
 
 export function nowIso(): string {

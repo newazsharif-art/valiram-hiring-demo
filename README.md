@@ -21,6 +21,17 @@ npm run build && npm start
 Optional settings: copy `.env.example` to `.env.local` (`SIM_DELAY_MS`, `NEXT_PUBLIC_SHOW_SOURCES`, `DATA_MODE`).
 Data lives in memory: restarting the server, or **Presenter panel → Reset demo data**, restores the starting state.
 
+## Deploy to Vercel
+
+Serverless instances don't share memory, so on Vercel the store is kept as one JSON value in Upstash Redis
+(`withStore()` in `src/server/store.ts`: load per API request, save if changed).
+
+1. vercel.com → **Add New → Project** → import this GitHub repo (Next.js defaults).
+2. Project → **Storage** → Marketplace → **Upstash Redis** (free plan, Singapore) → connect. This sets `KV_REST_API_URL` / `KV_REST_API_TOKEN`.
+3. Redeploy. Every push to `main` deploys again.
+
+All viewers share one data set; **Reset demo data** resets it for everyone.
+
 **Roles.** There is no sign-in. Use the user menu (top right) to switch between the three demo personas.
 The choice is kept in a `vh_user` cookie.
 
@@ -126,7 +137,7 @@ Reset first (`/demo` → Reset demo data). The pre-check delay is about 2.5 s; p
 src/domain/        schemas.ts (zod; types are inferred), types.ts, fixtures.ts (mock data, demo cast)
 src/lib/api.ts     typed client used by every page (fetch + zod) – unchanged when the backend changes
 src/server/
-  store.ts         in-memory store on globalThis (demo) → replace with a small DB (Azure SQL / Postgres)
+  store.ts         in-memory store on globalThis, optionally persisted to Upstash Redis (Vercel) → replace with a small DB (Azure SQL / Postgres)
   service.ts       app backend logic used by route handlers: role scoping, validation, completeTask()
   flows.ts         Flow 1 / Flow 1b behaviour (in the real build this runs in Opus; the app reads audit/results)
   precheck.ts      rule-based stand-in for the Opus AI pre-check
