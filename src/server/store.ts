@@ -56,6 +56,21 @@ export interface Db {
   seq: { task: number };
   /** Real Opus cases started by the app, keyed by requisition ID. */
   opus_cases: Record<string, OpusCaseRecord>;
+  /** Last incoming Opus webhook requests, newest first, secrets masked (debugging; spec 02). */
+  opus_webhook_log?: OpusWebhookLogEntry[];
+}
+
+export interface OpusWebhookLogEntry {
+  /** ISO UTC; display in MYT. */
+  at: string;
+  /** Path and query, with secret and bypass values masked. */
+  url: string;
+  /** Request headers, with secret-bearing values masked. */
+  headers: Record<string, string>;
+  /** Parsed JSON body with callback.token masked, or the raw text (truncated) if it isn't JSON. */
+  body: unknown;
+  status: number;
+  result: string;
 }
 
 function seedJobs(reqs: Requisition[], tasks: TaskRecord[]): Record<string, SimJob> {
