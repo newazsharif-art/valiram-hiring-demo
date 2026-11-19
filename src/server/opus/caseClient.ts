@@ -7,7 +7,7 @@ import "server-only";
 
 export const TIMEOUT_MS = 10_000;
 
-export type OpusStep = "initiate" | "execute";
+export type OpusStep = "initiate" | "execute" | "status" | "audit";
 /** bad_response = unreadable or incomplete answer; rejected = Opus answered but did not accept the request. */
 export type OpusErrorKind = "network" | "timeout" | "http" | "bad_response" | "rejected";
 
@@ -37,12 +37,16 @@ export function baseUrl(): string {
 }
 
 async function post(step: OpusStep, path: string, body: unknown): Promise<Record<string, unknown>> {
+  return request(step, path, "POST", body);
+}
+
+async function request(step: OpusStep, path: string, method: "GET" | "POST", body?: unknown): Promise<Record<string, unknown>> {
   let res: Response;
   try {
     res = await fetch(`${baseUrl()}${path}`, {
-      method: "POST",
+      method,
       headers: { "content-type": "application/json", "x-service-key": process.env.OPUS_SERVICE_KEY ?? "" },
-      body: JSON.stringify(body),
+      body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(TIMEOUT_MS),
       cache: "no-store",
     });
@@ -81,4 +85,14 @@ export async function executeCase(caseId: string, payload: OpusPayload): Promise
   if (json.success !== true) {
     throw new OpusApiError("execute", "rejected", "Opus execute response did not report success", undefined, JSON.stringify(json).slice(0, 500));
   }
+}
+
+/** GET /api/v1/case/{caseId}/status → { status }. */
+export async function getCaseStatus(caseId: string): Promise<Record<string, unknown>> {
+  return request("status", `/api/v1/case/${encodeURIComponent(caseId)}/status`, "GET");
+}
+
+/** GET /api/v1/case/{caseId}/audit → per-node execution audit (status, timing, inputs, outputs). */
+export async function getCaseAudit(caseId: string): Promise<Record<string, unknown>> {
+  return request("audit", `/api/v1/case/${encodeURIComponent(caseId)}/audit`, "GET");
 }
