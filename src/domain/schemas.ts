@@ -8,7 +8,6 @@ import { z } from "zod";
 export const RoleSchema = z.enum(["HR_RECRUITER", "HIRING_MANAGER", "HR_ADMIN"]);
 
 export const RequisitionStatusSchema = z.enum([
-  "Draft",
   "Submitted",
   "AiPrecheck",
   "WithHr",
@@ -263,7 +262,6 @@ export const JdInputSchema = z.object({
 
 export const RequisitionInputSchema = z
   .object({
-    action: z.enum(["draft", "submit"]),
     department: z.string(),
     role: z.string(),
     store_id: z.string(),
@@ -276,7 +274,6 @@ export const RequisitionInputSchema = z
     copied_from: z.string().optional(),
   })
   .superRefine((v, ctx) => {
-    if (v.action === "draft") return;
     const req = (ok: boolean, path: string, message: string) => {
       if (!ok) ctx.addIssue({ code: z.ZodIssueCode.custom, path: path.split("."), message });
     };

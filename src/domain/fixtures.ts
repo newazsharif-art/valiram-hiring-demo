@@ -188,14 +188,6 @@ const JD_005 = jd({
   shift_pattern: "",
 });
 
-const JD_009 = jd({
-  about: "Serve outlet shoppers at Genting Premium Outlets.",
-  duties: ["Assist customers", "Process sales at the counter"],
-  requirements: [],
-  benefits: "",
-  shift_pattern: "",
-});
-
 const JD_019 = jd({
   about: "Advise travellers on skincare, make-up and fragrance in our duty-free beauty hall at KLIA Main Terminal.",
   duties: ["Give personalised beauty advice and demos", "Meet personal and counter sales targets", "Keep testers, displays and stock in order"],
@@ -335,14 +327,6 @@ export function seedRequisitions(): Requisition[] {
         { at: at("2026-11-14 10:21"), text: "AI pre-check round 1: 2 issues. Returned to hiring manager." },
         { at: at("2026-11-16 09:05"), text: "Passed AI pre-check (round 2) and is waiting for HR verification." },
       ],
-    }),
-    req({
-      id: "REQ-2611-009", department: "Retail Operations", role: "Retail Sales Associate", store: "Genting Premium Outlets", region: "Pahang",
-      openings: 2, base_min: 1800, base_max: 2100, target_start: "2027-02-01", hm_user: "aiman",
-      jd_sections: JD_009, status: "Draft", round: 1,
-      created_at: at("2026-11-15 18:30"), updated_at: at("2026-11-15 18:30"),
-      versions: [], reviews: [],
-      activity: [{ at: at("2026-11-15 18:30"), text: "Draft saved by Aiman Zulkifli." }],
     }),
     req({
       id: "REQ-2610-019", department: "Beauty & Fragrance", role: "Beauty Advisor", store: "KLIA Main Terminal", region: "KLIA & Sepang",

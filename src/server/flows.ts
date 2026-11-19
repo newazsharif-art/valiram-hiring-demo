@@ -61,8 +61,13 @@ function sameJd(a: JdSections, b: JdSections) {
 
 // ------------------------------------------------------------------ Flow 1
 
-/** HM submits in the app: app creates the REQ (done by caller), starts Flow 1, stores the job ID. */
-export function submitRequisition(db: Db, r: Requisition, actor: User) {
+/**
+ * HM submits in the app: app creates the REQ (done by caller), starts Flow 1, stores the job ID.
+ * `simulatePrecheck: false` (a real Opus case was created, spec 01): the requisition is saved at
+ * AiPrecheck and stays there; its next status comes from the Opus Off-Platform webhook when the
+ * workflow reaches a human review node, not from the simulator.
+ */
+export function submitRequisition(db: Db, r: Requisition, actor: User, opts: { simulatePrecheck?: boolean } = {}) {
   const t = nowIso();
   r.status = "Submitted";
   r.round = 1;
@@ -71,14 +76,14 @@ export function submitRequisition(db: Db, r: Requisition, actor: User) {
   const job = startJob(db, "flow1", r.id);
   r.opus_job_ids.flow1 = job.id;
   log(r, `${actor.name} submitted the JD. App started Flow 1 (Jobs API) and saved job ID ${shortId(job.id)}.`);
-  startPrecheck(db, r);
+  startPrecheck(db, r, opts.simulatePrecheck ?? true);
 }
 
-function startPrecheck(db: Db, r: Requisition) {
+function startPrecheck(db: Db, r: Requisition, simulate = true) {
   r.status = "AiPrecheck";
   mark(r, "AiPrecheck");
   enterNode(job1(db, r), `n_precheck_r${r.round}`);
-  schedule(db, "precheck", r.id);
+  if (simulate) schedule(db, "precheck", r.id);
 }
 
 export function runPrecheckStep(db: Db, r: Requisition) {

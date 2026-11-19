@@ -14,10 +14,6 @@ export function flow1Steps(r: Requisition): FlowStep[] {
     { label: "Job posting", state: "todo" },
     { label: r.status === "Rejected" ? "Rejected" : "Live", state: "todo" },
   ];
-  if (r.status === "Draft") {
-    s[0].sub = "Draft, not submitted";
-    return s;
-  }
   s[0] = { ...s[0], state: "done", sub: `${t("Submitted") ?? ""} · REQ + Opus job created` };
   switch (r.status) {
     case "Submitted":
@@ -85,7 +81,6 @@ export function flow1bSteps(r: Requisition, total: number): FlowStep[] {
 }
 
 export function roundLabel(r: Requisition): string {
-  if (r.status === "Draft") return "–";
   if (r.status === "Live" || r.status === "JobPosting") return `Approved in ${r.reviews.find((x) => x.outcome === "approved")?.round ?? r.round}`;
   return `${r.round} of 3`;
 }

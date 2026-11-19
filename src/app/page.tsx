@@ -38,7 +38,7 @@ export default function HomePage() {
     .flatMap((r) => r.activity.map((a) => ({ ...a, id: r.id })))
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, 8);
-  const mine = all.filter((r) => !["Draft", "Rejected"].includes(r.status)).slice(0, 5);
+  const mine = all.filter((r) => r.status !== "Rejected").slice(0, 5);
 
   return (
     <>

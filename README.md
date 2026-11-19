@@ -47,7 +47,7 @@ The choice is kept in a `vh_user` cookie.
 |---|---|
 | `/` | Home: counters, Waiting for me, Recent activity, open requisitions |
 | `/requisitions` | Requisitions: stage filter chips with counts, search, table with Department |
-| `/requisitions/new` | New requisition (HM): Department* → Role*, Store → Region, openings, base range (min ≤ max), target start, JD section boxes, fixed How to apply. Save draft / Submit. `?draft=REQ-…` edits a draft (used by "Copy to new") |
+| `/requisitions/new` | New requisition (HM): Department* → Role*, Store → Region, openings, base range (min ≤ max), target start, JD section boxes, fixed How to apply. Submit to HR. `?copy=REQ-…` prefills the form from a rejected requisition ("Copy to new") |
 | `/requisitions/[id]` | Requisition detail: Flow 1 stepper; tabs Overview, JD & versions, Review history, Job posting (preview, embedded PDF, Open / Download), Activity (MYT) |
 | `/requisitions/[id]/candidates`, `/candidates` | Candidates & shortlist (Flow 1b): stepper, 3 band cards, filterable table |
 | `/tasks` | My tasks: Open / Completed, per role |
@@ -59,9 +59,8 @@ API (all JSON unless noted; the current user comes from the `vh_user` cookie):
 
 | Method and path | Purpose |
 |---|---|
-| `GET /api/requisitions?status=&q=` · `POST /api/requisitions` | List (role-scoped) · create (`action: "draft"` or `"submit"`, which starts Flow 1) |
-| `GET/PUT /api/requisitions/{id}` | Detail · update or submit a draft |
-| `POST /api/requisitions/{id}/copy` | "Copy to new requisition" → new prefilled Draft |
+| `GET /api/requisitions?status=&q=` · `POST /api/requisitions` | List (role-scoped) · submit (creates the REQ and starts Flow 1; optional `copied_from` = own Rejected REQ) |
+| `GET /api/requisitions/{id}` | Detail |
 | `GET /api/requisitions/{id}/posting.pdf[?download=1]` | Job post PDF (`application/pdf`) |
 | `GET /api/requisitions/{id}/candidates` | Candidates (HR only) |
 | `GET /api/tasks?status=open\|done\|all` · `GET /api/tasks/{id}` | Tasks for the current user (no callback token in responses) |
@@ -88,7 +87,7 @@ API (all JSON unless noted; the current user comes from the `vh_user` cookie):
 - Fail: an `HM_JD_REVISE` task goes to the HM.
 - HR approve: optional inline edits become a new published JD version. Then the Job posting step runs: the PDF is generated in a LinkedIn-style layout, with no LinkedIn logo, name or colours. The JD goes live.
 - HR return: comment required. An `HM_JD_REVISE` task goes to the HM; their resubmission starts round n+1.
-- Not approved after round 3: the requisition is **Rejected**. This happens when HR rejects in round 3 (the option reads "Reject requisition", comment required), or when the pre-check fails in round 3. The HM can then use **Copy to new requisition**, which makes a fresh draft that gets 3 new rounds.
+- Not approved after round 3: the requisition is **Rejected**. This happens when HR rejects in round 3 (the option reads "Reject requisition", comment required), or when the pre-check fails in round 3. The HM can then use **Copy to new requisition**, which opens the New requisition form prefilled; submitting it creates a new REQ with 3 new rounds.
 
 **Flow 1b · Shortlist.** Presenter panel → **Close KitaHQ screening** on a live requisition.
 - Scores are banded with the Settings thresholds:
@@ -111,7 +110,7 @@ Reset first (`/demo` → Reset demo data). The pre-check delay is about 2.5 s; p
 
 1. **Flow 1 happy path**
    1. User menu → **Jason Lim**.
-   2. Open **New requisition** → **Fill example** (or type your own) → **Submit to HR**. You see "Submitted as REQ-2611-010 … Opus job … started".
+   2. Open **New requisition** → **Fill example** (or type your own) → **Submit to HR**. You see "Submitted as REQ-2611-009 … Opus job … started".
    3. Click **Track progress**: the stepper shows AI pre-check, then HR verification.
    4. Switch to **Siti Rahman** → **My tasks** → **Review** the new "Verify JD".
    5. Optionally edit a section → **Approve** → **Send decision to Opus**.

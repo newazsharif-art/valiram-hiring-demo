@@ -70,9 +70,6 @@ export const api = {
     },
     get: (id: string): Promise<Requisition> => call(RequisitionSchema, `/api/requisitions/${encodeURIComponent(id)}`),
     create: (input: RequisitionInput): Promise<Requisition> => call(RequisitionSchema, "/api/requisitions", post(input)),
-    updateDraft: (id: string, input: RequisitionInput): Promise<Requisition> =>
-      call(RequisitionSchema, `/api/requisitions/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(input) }),
-    copy: (id: string): Promise<Requisition> => call(RequisitionSchema, `/api/requisitions/${encodeURIComponent(id)}/copy`, post()),
     candidates: (id: string): Promise<Candidate[]> =>
       call(z.array(CandidateSchema), `/api/requisitions/${encodeURIComponent(id)}/candidates`),
     postingPdfUrl: (id: string, download = false) =>

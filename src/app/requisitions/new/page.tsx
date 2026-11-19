@@ -69,29 +69,22 @@ function fromReq(r: Requisition): Form {
 function NewRequisitionInner() {
   const params = useSearchParams();
   const router = useRouter();
-  const draftId = params.get("draft");
+  const copyFrom = params.get("copy");
   const { user, bump } = useSession();
   const settings = useApi(() => api.settings.get(), []);
   const [form, setForm] = useState<Form>(EMPTY);
-  const [draft, setDraft] = useState<Requisition | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ kind: "submitted" | "saved"; r: Requisition } | null>(null);
+  const [result, setResult] = useState<Requisition | null>(null);
   const [error, setError] = useState<string>();
 
   useEffect(() => {
-    if (!draftId) {
-      setDraft(null);
-      return;
-    }
+    if (!copyFrom) return;
     api.requisitions
-      .get(draftId)
-      .then((r) => {
-        setDraft(r);
-        setForm(fromReq(r));
-      })
+      .get(copyFrom)
+      .then((r) => setForm(fromReq(r)))
       .catch((e: Error) => setError(e.message));
-  }, [draftId]);
+  }, [copyFrom]);
 
   if (settings.error) return <ErrorNote error={settings.error} />;
   if (!settings.data) return <Loading />;
@@ -109,8 +102,7 @@ function NewRequisitionInner() {
     );
   }
 
-  const toInput = (action: "draft" | "submit"): RequisitionInput => ({
-    action,
+  const toInput = (): RequisitionInput => ({
     department: form.department,
     role: form.role,
     store_id: form.store_id,
@@ -120,13 +112,13 @@ function NewRequisitionInner() {
     employment_type: form.employment_type,
     target_start: form.target_start,
     jd: fromDraft(form.jd),
-    copied_from: draft?.copied_from,
+    copied_from: copyFrom ?? undefined,
   });
 
-  const save = async (action: "draft" | "submit") => {
+  const submit = async () => {
     setError(undefined);
     setResult(null);
-    const input = toInput(action);
+    const input = toInput();
     const parsed = RequisitionInputSchema.safeParse(input);
     if (!parsed.success) {
       const errs: Record<string, string> = {};
@@ -138,18 +130,11 @@ function NewRequisitionInner() {
     setErrors({});
     setBusy(true);
     try {
-      const r = draft ? await api.requisitions.updateDraft(draft.id, input) : await api.requisitions.create(input);
+      const r = await api.requisitions.create(input);
       bump();
-      if (action === "submit") {
-        setResult({ kind: "submitted", r });
-        setDraft(null);
-        setForm(EMPTY);
-        if (draftId) router.replace("/requisitions/new");
-      } else {
-        setResult({ kind: "saved", r });
-        setDraft(r);
-        if (!draftId) router.replace(`/requisitions/new?draft=${r.id}`);
-      }
+      setResult(r);
+      setForm(EMPTY);
+      if (copyFrom) router.replace("/requisitions/new");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
       const err = e as ApiClientError;
@@ -170,8 +155,7 @@ function NewRequisitionInner() {
   return (
     <>
       <PageHeader
-        crumbs={draft ? [{ label: "Requisitions", href: "/requisitions" }, { label: `${draft.id} (draft)` }] : undefined}
-        title={draft ? `Draft ${draft.id}` : "New requisition"}
+        title="New requisition"
         subtitle='Fill in the role and write the JD. Submitting starts the Opus "Publish JD" workflow.'
         actions={
           <Button variant="text" onClick={() => setForm(EXAMPLE)}>
@@ -180,20 +164,15 @@ function NewRequisitionInner() {
         }
       />
 
-      {draft?.copied_from && (
+      {copyFrom && (
         <Alert severity="info">
-          Copied from <NextLink href={`/requisitions/${draft.copied_from}`}>{draft.copied_from}</NextLink> (rejected after round 3). Submitting starts a fresh Flow 1 with 3 new review rounds.
+          Copied from <NextLink href={`/requisitions/${copyFrom}`}>{copyFrom}</NextLink> (rejected after round 3). Submitting starts a fresh Flow 1 with 3 new review rounds.
         </Alert>
       )}
-      {result?.kind === "submitted" && (
+      {result && (
         <Alert severity="success" role="status">
-          <b>Submitted as {result.r.id}.</b> Opus job {result.r.opus_job_ids.flow1?.split("-").slice(0, 2).join("-")} started. The AI pre-check usually takes under a minute; you will get a task here if anything needs fixing.{" "}
-          <NextLink href={`/requisitions/${result.r.id}`}>Track progress</NextLink>
-        </Alert>
-      )}
-      {result?.kind === "saved" && (
-        <Alert severity="success" role="status">
-          Draft saved as {result.r.id}. Nothing was sent to Opus.
+          <b>Submitted as {result.id}.</b> Opus job {result.opus_job_ids.flow1?.split("-").slice(0, 2).join("-")} started. The AI pre-check usually takes under a minute; you will get a task here if anything needs fixing.{" "}
+          <NextLink href={`/requisitions/${result.id}`}>Track progress</NextLink>
         </Alert>
       )}
       {error && (
@@ -317,10 +296,7 @@ function NewRequisitionInner() {
               <JdSectionsEditor value={form.jd} onChange={(jd) => set({ jd })} howToApply={s.template.how_to_apply} errors={jdErrors} idPrefix="s" />
             </CardContent>
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, justifyContent: "flex-end", p: 2, borderTop: 1, borderColor: "divider" }}>
-              <Button variant="outlined" disabled={busy} onClick={() => save("draft")}>
-                Save draft
-              </Button>
-              <Button variant="contained" disabled={busy} onClick={() => save("submit")}>
+              <Button variant="contained" disabled={busy} onClick={submit}>
                 Submit to HR
               </Button>
             </Box>

@@ -12,7 +12,6 @@ import { roundLabel } from "@/lib/steps";
 
 const FILTERS: { key: string; label: string; statuses?: RequisitionStatus[] }[] = [
   { key: "all", label: "All" },
-  { key: "draft", label: "Draft", statuses: ["Draft"] },
   { key: "ai", label: "AI pre-check", statuses: ["Submitted", "AiPrecheck"] },
   { key: "hr", label: "With HR", statuses: ["WithHr"] },
   { key: "ret", label: "Returned to HM", statuses: ["ReturnedToHm"] },

@@ -61,7 +61,6 @@ export function range(min: number, max: number): string {
 export type ChipTone = "live" | "hr" | "ret" | "esc" | "ai" | "draft" | "post";
 
 export const STATUS_LABEL: Record<RequisitionStatus, string> = {
-  Draft: "Draft",
   Submitted: "Submitted",
   AiPrecheck: "AI pre-check",
   WithHr: "With HR",
@@ -72,7 +71,6 @@ export const STATUS_LABEL: Record<RequisitionStatus, string> = {
 };
 
 export const STATUS_TONE: Record<RequisitionStatus, ChipTone> = {
-  Draft: "draft",
   Submitted: "ai",
   AiPrecheck: "ai",
   WithHr: "hr",

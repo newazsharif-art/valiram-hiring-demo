@@ -77,23 +77,21 @@ function nextReqId(d: Db): string {
 
 function applyInput(d: Db, r: Requisition, input: RequisitionInput) {
   const store = d.settings.stores.find((s) => s.id === input.store_id);
-  if (input.action === "submit") {
-    const dept = d.settings.departments.find((x) => x.name === input.department);
-    if (!dept) throw new ApiError(400, "invalid", "Unknown department", { field: "department" });
-    if (!dept.roles.includes(input.role)) throw new ApiError(400, "invalid", "Role is not under the chosen department", { field: "role" });
-    if (!store) throw new ApiError(400, "invalid", "Unknown store", { field: "store_id" });
-  }
+  const dept = d.settings.departments.find((x) => x.name === input.department);
+  if (!dept) throw new ApiError(400, "invalid", "Unknown department", { field: "department" });
+  if (!dept.roles.includes(input.role)) throw new ApiError(400, "invalid", "Role is not under the chosen department", { field: "role" });
+  if (!store) throw new ApiError(400, "invalid", "Unknown store", { field: "store_id" });
   r.department = input.department;
   r.role = input.role;
   r.store_id = input.store_id;
-  r.store = store?.name ?? "";
-  r.region = store?.region ?? "";
+  r.store = store.name;
+  r.region = store.region;
   r.openings = input.openings;
   r.base_min = input.base_min;
   r.base_max = input.base_max;
   r.employment_type = input.employment_type;
   r.target_start = input.target_start;
-  r.copied_from = input.copied_from ?? r.copied_from;
+  r.copied_from = input.copied_from;
   const sections: JdSections = {
     about: input.jd.about.trim(),
     duties: input.jd.duties.map((s) => s.trim()).filter(Boolean),
@@ -108,29 +106,35 @@ function applyInput(d: Db, r: Requisition, input: RequisitionInput) {
 }
 
 /**
- * Submit path shared by create and draft-submit (spec 01): start the real Opus case first, and only
- * if it succeeds commit the requisition, start the simulated Flow 1 and save the case ID.
- * `commit` writes the requisition to the store; on an Opus failure it never runs.
+ * Submit (spec 01): start the real Opus case first, and only if it succeeds store the requisition,
+ * start the simulated Flow 1 and save the case ID. On an Opus failure nothing is stored.
  */
-async function submitWithOpusCase(d: Db, r: Requisition, u: User, commit: () => Requisition): Promise<Requisition> {
+async function submitWithOpusCase(d: Db, r: Requisition, u: User): Promise<Requisition> {
   const opusCase = await startCreateRequisitionCase(r, u);
-  const saved = commit();
-  submitRequisition(d, saved, u);
+  d.requisitions.push(r);
+  // With a real Opus case the status stays AiPrecheck until the Opus Off-Platform webhook reports a
+  // human review node; the simulated pre-check only runs when the integration is off.
+  submitRequisition(d, r, u, { simulatePrecheck: !opusCase });
   if (opusCase) {
-    d.opus_cases[saved.id] = {
-      requisition_id: saved.id,
+    d.opus_cases[r.id] = {
+      requisition_id: r.id,
       flow: "create_requisition",
       workflow_id: opusCase.workflowId,
       case_id: opusCase.caseId,
       created_at: nowIso(),
     };
   }
-  return saved;
+  return r;
 }
 
 export async function createRequisition(u: User, input: RequisitionInput): Promise<Requisition> {
   if (u.role !== "HIRING_MANAGER") throw new ApiError(403, "forbidden", "Only hiring managers create requisitions");
   const d = db();
+  // "Copy to new requisition": only from the HM's own requisition rejected after round 3.
+  const src = input.copied_from ? getRequisition(u, input.copied_from) : undefined;
+  if (src && (src.hm_user !== u.id || src.status !== "Rejected")) {
+    throw new ApiError(400, "invalid", "Only your own rejected requisitions can be copied", { field: "copied_from" });
+  }
   const t = nowIso();
   const r: Requisition = {
     id: nextReqId(d),
@@ -148,7 +152,7 @@ export async function createRequisition(u: User, input: RequisitionInput): Promi
     hm_name: u.name,
     jd_sections: { about: "", duties: [], requirements: [], benefits: "", shift_pattern: "", how_to_apply: d.settings.template.how_to_apply },
     template_version: d.settings.template.version,
-    status: "Draft",
+    status: "Submitted",
     round: 1,
     opus_job_ids: {},
     created_at: t,
@@ -160,55 +164,9 @@ export async function createRequisition(u: User, input: RequisitionInput): Promi
     screening: "not_open",
   };
   applyInput(d, r, input);
-  if (input.action === "submit") {
-    return submitWithOpusCase(d, r, u, () => {
-      d.requisitions.push(r);
-      return r;
-    });
-  }
-  d.requisitions.push(r);
-  r.activity.push({ at: t, text: `Draft saved by ${u.name}.` });
-  return r;
-}
-
-export async function updateDraft(u: User, id: string, input: RequisitionInput): Promise<Requisition> {
-  const d = db();
-  const r = getRequisition(u, id);
-  if (r.hm_user !== u.id) throw new ApiError(403, "forbidden", "Only the hiring manager can edit this draft");
-  if (r.status !== "Draft") throw new ApiError(409, "not_draft", "Only drafts can be edited");
-  if (input.action === "submit") {
-    // Work on a copy so a failed Opus call leaves the stored draft unchanged.
-    const next = structuredClone(r);
-    applyInput(d, next, input);
-    return submitWithOpusCase(d, next, u, () => Object.assign(r, next));
-  }
-  applyInput(d, r, input);
-  r.activity.push({ at: nowIso(), text: `Draft saved by ${u.name}.` });
-  return r;
-}
-
-/** "Copy to new requisition": a new Draft with the same fields and latest JD; fresh Flow 1 with 3 rounds on submit. */
-export async function copyRequisition(u: User, id: string): Promise<Requisition> {
-  const d = db();
-  const src = getRequisition(u, id);
-  if (u.role !== "HIRING_MANAGER" || src.hm_user !== u.id) throw new ApiError(403, "forbidden", "Only the requisition's hiring manager can copy it");
-  const r = await createRequisition(u, {
-    action: "draft",
-    department: src.department,
-    role: src.role,
-    store_id: src.store_id,
-    openings: src.openings,
-    base_min: src.base_min,
-    base_max: src.base_max,
-    employment_type: src.employment_type,
-    target_start: src.target_start,
-    jd: { ...src.jd_sections },
-    copied_from: src.id,
-  });
-  r.activity = [{ at: nowIso(), text: `Copied from ${src.id} by ${u.name} (draft).` }];
-  src.activity.push({ at: nowIso(), text: `${u.name} copied this requisition to ${r.id}.` });
-  void d;
-  return r;
+  const saved = await submitWithOpusCase(d, r, u);
+  if (src) src.activity.push({ at: nowIso(), text: `${u.name} copied this requisition to ${saved.id}.` });
+  return saved;
 }
 
 export function getCandidates(u: User, reqId: string): Candidate[] {
@@ -364,6 +322,13 @@ export function demoAdvance(reqId: string) {
   const d = db();
   const r = d.requisitions.find((x) => x.id === reqId);
   if (!r) throw new ApiError(404, "not_found", `Requisition ${reqId} not found`);
+  if (r.status === "AiPrecheck" && d.opus_cases[r.id]) {
+    throw new ApiError(
+      409,
+      "opus_driven",
+      "This requisition runs on the real Opus workflow. Its status changes when Opus reaches a review step, not from the simulator.",
+    );
+  }
   if (r.status === "AiPrecheck") runPrecheckStep(d, r);
   else if (r.status === "JobPosting") runPostingStep(d, r);
   else throw new ApiError(409, "nothing_pending", "No simulated step is pending for this requisition");

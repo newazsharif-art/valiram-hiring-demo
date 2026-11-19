@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   );
 }
 
-/** Create a requisition. action "draft" saves; action "submit" creates the REQ and starts Flow 1. */
+/** Submit a new requisition: creates the REQ and starts Flow 1. */
 export async function POST(req: Request) {
   const u = await currentUser();
   return handle(async () => createRequisition(u, RequisitionInputSchema.parse(await readJson(req))), { status: 201 });

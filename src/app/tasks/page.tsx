@@ -7,7 +7,7 @@ import AssignmentIcon from "@mui/icons-material/Assignment";
 import EditIcon from "@mui/icons-material/Edit";
 import WarningIcon from "@mui/icons-material/Warning";
 import CheckIcon from "@mui/icons-material/Check";
-import { api, ApiClientError } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useApi, useSession } from "@/components/SessionProvider";
 import { DataSourceBadge, ErrorNote, Loading, PageHeader, StatusChip } from "@/components/ui";
 import type { ChipTone } from "@/lib/format";
@@ -36,10 +36,9 @@ const ICONS = {
 };
 
 export default function TasksPage() {
-  const { user, bump } = useSession();
+  const { user } = useSession();
   const router = useRouter();
   const [view, setView] = useState(0);
-  const [err, setErr] = useState<string>();
   const tasks = useApi(() => api.tasks.list("all"), [], { pollMs: 5000 });
   const reqs = useApi(() => api.requisitions.list(), [], { pollMs: 5000 });
 
@@ -95,15 +94,7 @@ export default function TasksPage() {
         chip: { tone: "esc", label: "Rejected" },
         action: "Copy to new",
         primary: false,
-        onClick: async () => {
-          try {
-            const n = await api.requisitions.copy(r.id);
-            bump();
-            router.push(`/requisitions/new?draft=${n.id}`);
-          } catch (e) {
-            setErr((e as ApiClientError).message);
-          }
-        },
+        onClick: () => router.push(`/requisitions/new?copy=${r.id}`),
       });
     }
   }
@@ -117,7 +108,6 @@ export default function TasksPage() {
   return (
     <>
       <PageHeader title="My tasks" subtitle={intro} />
-      {err && <Alert severity="error">{err}</Alert>}
       <Card component="section" aria-label="Tasks">
         <Tabs value={view} onChange={(_, v: number) => setView(v)} aria-label="Task status" sx={{ borderBottom: 1, borderColor: "divider" }}>
           <Tab label={`Open (${openRows.length})`} id="tasks-tab-0" aria-controls="tasks-panel" />

@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useState } from "react";
 import {
   Accordion,
@@ -23,7 +23,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import DownloadIcon from "@mui/icons-material/Download";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import { api, ApiClientError } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useApi, useSession } from "@/components/SessionProvider";
 import {
   DataSourceBadge,
@@ -47,10 +47,8 @@ const BUSY = ["Submitted", "AiPrecheck", "JobPosting"];
 
 export default function RequisitionDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
-  const { user, bump } = useSession();
+  const { user } = useSession();
   const [tab, setTab] = useState(0);
-  const [copyErr, setCopyErr] = useState<string>();
   const req = useApi(() => api.requisitions.get(id), [id], { pollMs: 2500 });
   const tasks = useApi(() => api.tasks.list("open"), [id], { pollMs: 5000 });
 
@@ -60,16 +58,6 @@ export default function RequisitionDetailPage() {
   const myTask = tasks.data?.find((t) => t.requisition_id === r.id);
   const published = [...r.versions].reverse().find((v) => v.published) ?? r.versions[r.versions.length - 1];
   const isMine = user.role === "HIRING_MANAGER" && r.hm_user === user.id;
-
-  const copy = async () => {
-    try {
-      const n = await api.requisitions.copy(r.id);
-      bump();
-      router.push(`/requisitions/new?draft=${n.id}`);
-    } catch (e) {
-      setCopyErr((e as ApiClientError).message);
-    }
-  };
 
   return (
     <>
@@ -91,20 +79,14 @@ export default function RequisitionDetailPage() {
                 {myTask.task_type === "HM_JD_REVISE" ? "Revise JD" : "Open task"}
               </Button>
             )}
-            {isMine && r.status === "Draft" && (
-              <Button variant="contained" component={Link} href={`/requisitions/new?draft=${r.id}`}>
-                Continue draft
-              </Button>
-            )}
             {isMine && r.status === "Rejected" && (
-              <Button variant="outlined" startIcon={<ContentCopyIcon />} onClick={copy}>
+              <Button variant="outlined" startIcon={<ContentCopyIcon />} component={Link} href={`/requisitions/new?copy=${r.id}`}>
                 Copy to new requisition
               </Button>
             )}
           </>
         }
       />
-      {copyErr && <Alert severity="error">{copyErr}</Alert>}
       {BUSY.includes(r.status) && (
         <Alert severity="info" role="status">
           {r.status === "JobPosting" ? "Opus is generating the job posting (demo: LinkedIn-style PDF)…" : "Opus is running the AI pre-check. This page refreshes by itself."}
@@ -143,7 +125,7 @@ export default function RequisitionDetailPage() {
                   ["Target start", r.target_start ? formatMyt(`${r.target_start}T00:00:00+08:00`, "date") : "–"],
                   ["Hiring manager", r.hm_name],
                   ["HR verifier", r.hr_name ?? "–"],
-                  ["Review rounds used", r.status === "Draft" ? "–" : `${r.round} of 3`],
+                  ["Review rounds used", `${r.round} of 3`],
                   ["JD template", r.template_version],
                   ["Opus job ID (Flow 1)", <Box component="span" key="j" sx={{ fontFamily: "'Roboto Mono', monospace", fontSize: 13 }}>{r.opus_job_ids.flow1 ?? "–"}</Box>],
                   ...(r.copied_from ? ([["Copied from", <NextLink key="c" href={`/requisitions/${r.copied_from}`}>{r.copied_from}</NextLink>]] as [string, React.ReactNode][]) : []),
@@ -175,7 +157,7 @@ export default function RequisitionDetailPage() {
           {tab === 1 && (
             <>
               {r.versions.length === 0 ? (
-                <Typography color="text.secondary">No versions yet (draft).</Typography>
+                <Typography color="text.secondary">No versions yet.</Typography>
               ) : (
                 <TableScroll label="JD versions">
                   <Table size="small">
