@@ -167,7 +167,7 @@ Sample (decoded):
 
 | Output ID (Opus) | Display name | Type | Value |
 | :--- | :--- | :--- | :--- |
-| `workflow_output_84zgk25bn` | Reviewed JD Json | `json_string` | `JSON.stringify` of the reviewed requisition in the **same keys and formats as the input** (§7.2) |
+| `workflow_output_84zgk25bn` | Reviewed JD Json | `json_string` | `JSON.stringify` of the reviewed requisition in the **same keys and formats as the input** (§7.2). Real runs send `Full time` and `DD/MM/YYYY`; the first sample had `Full-time` and `DD-MM-YYYY` |
 | `b52a7030-aba8-4467-a433-e05c4633166c` | Pass Status | `bool` | `true` = Approve, `false` = Return to hiring manager |
 | `workflow_output_1ldrqy5bs` | HR Response Message | `str` | HR's comment, trimmed. Required on Return; `""` when empty on Approve |
 
@@ -195,9 +195,9 @@ The output's description says "Just reply whole same exact json". The app starts
 | `department`, `role` | As entered |
 | `store` | Store **name** |
 | `region` | Region of the store, from Settings |
-| `employment_type` | `Full-time` / `Part-time` |
+| `employment_type` | Same style as received: `Full time` / `Part time`, or `Full-time` / `Part-time` |
 | `openings`, `base_salary_from`, `base_salary_to` | Numbers |
-| `target_start_date` | `DD-MM-YYYY` |
+| `target_start_date` | Same separator as received: `DD/MM/YYYY` or `DD-MM-YYYY` |
 | `about_the_role`, `benefits`, `shift_pattern` | Trimmed text (`""` if empty) |
 | `what_you_will_do`, `what_we_look_for` | Points joined with `\n` |
 | `requisition_id` | The REQ ID, unchanged |

@@ -301,7 +301,7 @@ export function buildHmReviewOutput(r: Requisition): Record<string, string | num
 /** HM Review Round 1 output "Requisition Id" (str, not nullable): passes the REQ ID on to the next nodes. */
 export const HM_REVIEW_REQUISITION_ID_OUTPUT = "workflow_output_zk3o1np3u";
 
-/** "YYYY-MM-DD" → "DD-MM-YYYY" (the HR final check node's date format, spec 03 §7.2). */
+/** "YYYY-MM-DD" → "DD-MM-YYYY". */
 export function toDashDate(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
   return m ? `${m[3]}-${m[2]}-${m[1]}` : iso;
@@ -312,6 +312,11 @@ export function toDashDate(iso: string): string {
  * overwritten by the reviewed requisition in this node's input formats. Unknown keys and key order are kept.
  */
 export function buildReviewedJson(source: Record<string, unknown>, r: Requisition): string {
+  // Reply in the formats Opus sent ("Full time" or "Full-time"; "04/01/2027" or "04-01-2027").
+  const srcType = typeof source.employment_type === "string" ? source.employment_type : "";
+  const employment = /full|part/i.test(srcType) && !srcType.includes("-") ? r.employment_type.replace("-", " ") : r.employment_type;
+  const srcDate = typeof source.target_start_date === "string" ? source.target_start_date : "";
+  const date = srcDate.includes("/") ? toDashDate(r.target_start).replace(/-/g, "/") : toDashDate(r.target_start);
   const v: Record<Field, string | number> = {
     requisition_id: r.id,
     message: "",
@@ -319,9 +324,9 @@ export function buildReviewedJson(source: Record<string, unknown>, r: Requisitio
     role: r.role,
     store: r.store,
     region: r.region,
-    employment_type: r.employment_type,
+    employment_type: employment,
     openings: r.openings,
-    target_start: toDashDate(r.target_start),
+    target_start: date,
     base_min: r.base_min,
     base_max: r.base_max,
     about: r.jd_sections.about.trim(),
