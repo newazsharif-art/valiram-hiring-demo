@@ -1,5 +1,5 @@
 /**
- * Real Opus Off-Platform nodes the app handles (spec 02, spec 03).
+ * Real Opus Off-Platform nodes the app handles (spec 02, spec 03, spec 04).
  * Opus doesn't say which node sent a webhook, so each node has its own webhook URL:
  *   POST /api/opus/webhook?node=<key>
  * Input and output IDs live here, so a Builder change only touches this file.
@@ -47,10 +47,10 @@ export const HM_REVIEW_INPUTS: Record<string, Field> = {
 };
 
 /**
- * Round 1 · HR final check: keys inside the single `json_string` input (spec 03 §6.2).
- * The same keys are sent back in the "Reviewed JD Json" output (spec 03 §7.2).
+ * Keys inside the single `json_string` requisition input of the HR final check (spec 03 §6.2) and
+ * Hiring Manager Review Round 2 (spec 04 §6.2). The same keys are sent back in their JSON output.
  */
-export const HR_REVIEW_JSON_KEYS: Record<string, Field> = {
+export const REQ_JSON_KEYS: Record<string, Field> = {
   requisition_id: "requisition_id",
   department: "department",
   role: "role",
@@ -77,6 +77,18 @@ export const HR_REVIEW_OUTPUTS = {
   message: "workflow_output_1ldrqy5bs",
 } as const;
 
+/** Hiring Manager Review Round 2 output "Updated Json" (json_string, not nullable; spec 04 §7.1). */
+export const HM_REVIEW_R2_OUTPUT = "workflow_output_0256au6te";
+
+/** How the app replies on the callback. */
+export type OpusReply =
+  /** 14 flat values + Requisition Id (spec 02). */
+  | "fields"
+  /** Reviewed JSON + Pass Status + HR message (spec 03). */
+  | "hr_decision"
+  /** One json_string output: the requisition JSON as received, with the HM's values (spec 04). */
+  | "json";
+
 export interface OpusNode {
   task_type: TaskType;
   round: number;
@@ -88,6 +100,7 @@ export interface OpusNode {
   /** One `json_string` input holding all fields (spec 03): its input ID, and JSON key → app field. */
   json_input?: string;
   json_keys?: Record<string, Field>;
+  reply: OpusReply;
 }
 
 export const OPUS_NODES: Record<string, OpusNode> = {
@@ -97,6 +110,7 @@ export const OPUS_NODES: Record<string, OpusNode> = {
     node_id: "n_hm_revise_r1",
     label: "Hiring Manager Review Round 1",
     inputs: HM_REVIEW_INPUTS,
+    reply: "fields",
   },
   hr_review_r1: {
     task_type: "HR_JD_CHECK",
@@ -104,9 +118,25 @@ export const OPUS_NODES: Record<string, OpusNode> = {
     node_id: "n_hr_verify_r1",
     label: "Round 1 · HR final check",
     json_input: "workflow_input_5x656gas6",
-    json_keys: HR_REVIEW_JSON_KEYS,
+    json_keys: REQ_JSON_KEYS,
+    reply: "hr_decision",
+  },
+  hm_review_r2: {
+    task_type: "HM_JD_REVISE",
+    round: 2,
+    node_id: "n_hm_revise_r2",
+    label: "Hiring Manager Review Round 2",
+    inputs: { workflow_input_mffq3gx3y: "message" }, // HR Response Message
+    json_input: "workflow_input_1n862ffg8",
+    json_keys: REQ_JSON_KEYS,
+    reply: "json",
   },
 };
+
+/** The node a task came from, by its stage key. */
+export function opusNodeById(node_id: string | undefined): OpusNode | undefined {
+  return Object.values(OPUS_NODES).find((n) => n.node_id === node_id);
+}
 
 // ------------------------------------------------------------ parsers (Opus → app)
 
@@ -338,8 +368,13 @@ export function buildReviewedJson(source: Record<string, unknown>, r: Requisitio
     shift_pattern: (r.jd_sections.shift_pattern ?? "").trim(),
   };
   const out: Record<string, unknown> = { ...source };
-  for (const [key, field] of Object.entries(HR_REVIEW_JSON_KEYS)) out[key] = v[field];
+  for (const [key, field] of Object.entries(REQ_JSON_KEYS)) out[key] = v[field];
   return JSON.stringify(out);
+}
+
+/** Hiring Manager Review Round 2 output (spec 04 §7.1): the updated requisition JSON. */
+export function buildHmUpdatedJsonOutput(source: Record<string, unknown>, r: Requisition): Record<string, string> {
+  return { [HM_REVIEW_R2_OUTPUT]: buildReviewedJson(source, r) };
 }
 
 /** The HR final check outputs (spec 03 §7.1). Bare values. */

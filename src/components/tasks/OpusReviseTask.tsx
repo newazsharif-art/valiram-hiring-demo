@@ -1,7 +1,8 @@
 "use client";
 /**
- * "Revise requisition" for a task delivered by the real Opus webhook (spec 02 §8):
- * the Message to Hiring Manager (read only) and the New requisition form, prefilled from Opus.
+ * "Revise requisition" for a task delivered by the real Opus webhook (spec 02 §8, spec 04 §8):
+ * the Message to Hiring Manager (round 1, from the AI pre-check) or the HR Response Message
+ * (round 2, from HR), read only, and the New requisition form, prefilled from Opus.
  * Resubmit sends the fields to the Opus callback API; on success the requisition is With HR.
  */
 import Link from "next/link";
@@ -32,6 +33,8 @@ export function OpusReviseTask({ task, requisition: r, onChanged }: { task: Task
   const unmatched = (task.inputs.unmatched as Unmatched | undefined) ?? {};
   const message = String(task.inputs.message ?? "");
   const round = task.round ?? r.round;
+  const returnedBy = String(task.inputs.returned_by ?? "AI pre-check");
+  const fromHr = returnedBy !== "AI pre-check";
   const [form, setForm] = useState<RequisitionForm>(prefill ? formFromInput(prefill) : formFromRequisition(r));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [state, setState] = useState<SubmitState>(task.status === "closed" ? { kind: "closed" } : { kind: "idle" });
@@ -71,7 +74,11 @@ export function OpusReviseTask({ task, requisition: r, onChanged }: { task: Task
         crumbs={[{ label: "My tasks", href: "/tasks" }, { label: "Revise requisition" }]}
         title={`Revise requisition · ${r.role}, ${r.store}`}
         chips={<StatusChip tone="ret" label={`Round ${round} of 3`} />}
-        subtitle={`${r.id} · Returned by the AI pre-check on ${formatMyt(task.created_at, "full")}`}
+        subtitle={
+          fromHr
+            ? `${r.id} · Returned by ${returnedBy} (HR) on ${formatMyt(task.created_at, "full")} · ${round >= 3 ? "This is the last review round" : `Round ${round + 1} is the last review round`}`
+            : `${r.id} · Returned by the AI pre-check on ${formatMyt(task.created_at, "full")}`
+        }
       />
 
       {sent && (
@@ -84,7 +91,7 @@ export function OpusReviseTask({ task, requisition: r, onChanged }: { task: Task
 
       {message.trim() && (
         <Alert severity="info" role="note">
-          <AlertTitle sx={{ fontWeight: 500 }}>Message to Hiring Manager</AlertTitle>
+          <AlertTitle sx={{ fontWeight: 500 }}>{fromHr ? "HR Response Message" : "Message to Hiring Manager"}</AlertTitle>
           <Box component="span" sx={{ whiteSpace: "pre-line" }}>
             {message.trim()}
           </Box>

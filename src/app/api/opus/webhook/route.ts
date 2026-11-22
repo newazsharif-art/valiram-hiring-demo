@@ -44,7 +44,7 @@ function maskedBody(text: string): unknown {
 
 /**
  * Real Opus Off-Platform webhook (spec 02 §6).
- *   POST /api/opus/webhook?node=hm_review_r1
+ *   POST /api/opus/webhook?node=hm_review_r1 (or hr_review_r1, hm_review_r2; see OPUS_NODES)
  *   Header X-Valiram-Webhook-Secret: <OPUS_WEBHOOK_SECRET>
  *   (or, if the node can't send headers: ...&secret=<OPUS_WEBHOOK_SECRET>; the header wins when both are sent)
  * Stores execution_id + callback (Opus never resends them), creates the task, answers 200 fast.

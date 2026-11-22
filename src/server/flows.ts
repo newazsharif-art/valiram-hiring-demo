@@ -154,6 +154,31 @@ export function opusReturnToHm(r: Requisition, round: number, message: string, t
 }
 
 /**
+ * The real Opus run paused at a Hiring Manager Review node after HR returned the requisition
+ * (round ≥ 2, spec 04 §6.3). Fields are not changed and no pre-check result is recorded.
+ * Normally HR's Return already set ReturnedToHm for this round; if the app missed it, catch up
+ * (Opus is the source of truth).
+ */
+export function opusHmReceived(r: Requisition, round: number, message: string, taskId: string, hmName: string, nodeLabel: string) {
+  const prev = round - 1;
+  const prevRv = r.reviews.find((x) => x.round === prev) ?? (r.reviews.push({ round: prev, outcome: "returned" }), r.reviews[r.reviews.length - 1]);
+  const text = message.trim();
+  if (text) {
+    if (!prevRv.hr) prevRv.hr = { decision: "reject", by: r.hr_name ?? "HR", at: nowIso(), comments: text, edited: false };
+    else if (!prevRv.hr.comments) prevRv.hr.comments = text;
+  }
+  if (r.status !== "ReturnedToHm" || r.round !== round) {
+    prevRv.outcome = "returned";
+    r.round = round;
+    if (!r.reviews.some((x) => x.round === round)) r.reviews.push({ round, outcome: "pending" });
+    r.status = "ReturnedToHm";
+    mark(r, "ReturnedToHm");
+    log(r, `Opus returned the requisition to the hiring manager (round ${prev}).`);
+  }
+  log(r, `Opus paused at ${nodeLabel}; task ${taskId} assigned to ${hmName}.`);
+}
+
+/**
  * The HM's changes were accepted by Opus (callback 200): save them and move the requisition to
  * With HR. The round stays the same; the HR task arrives through the next webhook.
  */

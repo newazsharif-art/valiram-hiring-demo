@@ -19,7 +19,7 @@ import { nowIso, rawDb, resetDb, simDelayMs } from "./store";
 import { runPostingStep, runPrecheckStep, startFlow1b, submitRequisition, tick } from "./flows";
 import { dataMode, sendCallback } from "./app/callbackSender";
 import { startCreateRequisitionCase } from "./app/createRequisitionCase";
-import { buildHmReviewOutput, buildHrReviewOutput } from "./app/opusNodes";
+import { buildHmReviewOutput, buildHmUpdatedJsonOutput, buildHrReviewOutput, opusNodeById } from "./app/opusNodes";
 import { opusHrDecided, opusResubmitted } from "./flows";
 import { RequisitionInputSchema } from "@/domain/schemas";
 
@@ -286,7 +286,9 @@ const FIELD_LABELS: [keyof Requisition, string][] = [
 
 /**
  * Completes a task that came from the real Opus webhook. Only on 200 does the requisition change.
- * - HM review (spec 02 §7). Body: { requisition }. 15 bare outputs; requisition → With HR.
+ * - HM review round 1 (spec 02 §7). Body: { requisition }. 15 bare outputs; requisition → With HR.
+ * - HM review round 2 (spec 04 §7). Body: { requisition }. One output: the requisition JSON as received,
+ *   with the HM's values; requisition → With HR (same round).
  * - HR final check (spec 03 §7). Body: { requisition, decision: "approve" | "return", hr_comments? }.
  *   Reviewed JSON + pass flag + message; Approve → Live, Return → Returned to HM next round.
  */
@@ -307,9 +309,15 @@ async function completeOpusTask(d: Db, t: TaskRecord, r: Requisition, body: Reco
   // Build the requisition as it will be saved, without touching the stored one yet.
   const next: Requisition = structuredClone(r);
   applyInput(d, next, { ...input, copied_from: r.copied_from });
-  const output_data: Record<string, unknown> = isHr
-    ? buildHrReviewOutput((t.inputs.source_json as Record<string, unknown> | undefined) ?? {}, next, decision === "approve", comments)
-    : buildHmReviewOutput(next);
+  // The reply shape belongs to the node, not the task type: two HM_JD_REVISE nodes reply differently (spec 04 §5).
+  const reply = opusNodeById(t.node_id)?.reply ?? (isHr ? "hr_decision" : "fields");
+  const source = (t.inputs.source_json as Record<string, unknown> | undefined) ?? {};
+  const output_data: Record<string, unknown> =
+    reply === "hr_decision"
+      ? buildHrReviewOutput(source, next, decision === "approve", comments)
+      : reply === "json"
+        ? buildHmUpdatedJsonOutput(source, next)
+        : buildHmReviewOutput(next);
 
   const declared = Object.keys(t.expected_output_schema ?? {});
   const undeclared = Object.keys(output_data).filter((k) => !declared.includes(k));
