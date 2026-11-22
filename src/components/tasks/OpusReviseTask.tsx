@@ -6,7 +6,7 @@
  */
 import Link from "next/link";
 import { useState } from "react";
-import { Alert, AlertTitle, Box, Button, CardContent, TextField, Typography } from "@mui/material";
+import { Alert, AlertTitle, Box, Button, CardContent, Typography } from "@mui/material";
 import type { Requisition, RequisitionInput, Task } from "@/domain/types";
 import { api } from "@/lib/api";
 import { useApi, useSession } from "@/components/SessionProvider";
@@ -34,7 +34,6 @@ export function OpusReviseTask({ task, requisition: r, onChanged }: { task: Task
   const round = task.round ?? r.round;
   const [form, setForm] = useState<RequisitionForm>(prefill ? formFromInput(prefill) : formFromRequisition(r));
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [note, setNote] = useState("");
   const [state, setState] = useState<SubmitState>(task.status === "closed" ? { kind: "closed" } : { kind: "idle" });
   const [sent, setSent] = useState(task.status === "done");
   const open = task.status === "open" && state.kind !== "closed" && !sent;
@@ -54,7 +53,7 @@ export function OpusReviseTask({ task, requisition: r, onChanged }: { task: Task
     }
     setState({ kind: "busy" });
     try {
-      await api.tasks.complete(task.id, { requisition: input, hm_note: note.trim() });
+      await api.tasks.complete(task.id, { requisition: input });
       setSent(true);
       setState({ kind: "idle" });
       bump();
@@ -105,9 +104,8 @@ export function OpusReviseTask({ task, requisition: r, onChanged }: { task: Task
       <SectionCard title="Resubmit">
         <CardContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <Typography color="text.secondary" sx={{ fontSize: 13 }}>
-            All fields above are sent to Opus. The note is kept in the requisition history only.
+            All fields above are sent to Opus.
           </Typography>
-          <TextField id="note" label="Note for the record (optional)" multiline minRows={2} value={note} onChange={(e) => setNote(e.target.value)} disabled={!open} />
           {state.kind === "error" && <Alert severity="error">{state.message}</Alert>}
           {open && (
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, justifyContent: "flex-end" }}>

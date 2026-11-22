@@ -232,14 +232,14 @@ The value builder is shared with spec 01 (`CREATE_REQUISITION_INPUTS` value func
 
 ### 7.2 Building and checking `output_data`
 
-The task screen (§8) sends the edited form as `{ requisition: RequisitionInput, hm_note?: string }` to `POST /api/tasks/{id}/complete`. For a task with `source: "opus"`, `completeTask()`:
+The task screen (§8) sends the edited form as `{ requisition: RequisitionInput }` to `POST /api/tasks/{id}/complete`. For a task with `source: "opus"`, `completeTask()`:
 
 1. validates with `RequisitionInputSchema` and the same department / role / store checks as `applyInput()`; errors come back per field like on New requisition;
 2. builds the 14 values in §7.1 from the validated input (store and region resolved from Settings);
 3. checks the keys against the task's stored `expected_output_schema`: any output ID the app would send that isn't declared → `500 opus_schema_mismatch` (logged with both key lists) and Opus is not called. Declared outputs the app doesn't know are left out if nullable; a declared **non-nullable** output the app doesn't fill → also `500 opus_schema_mismatch`, Opus is not called (Opus would otherwise answer `200` and fail the node);
 4. sends `{ "output_data": { … }, "status": "success" }`.
 
-`hm_note` is optional and stays in the app (review history and version note). It is not sent to Opus.
+There is no comment field: the hiring manager only edits the requisition. (The server still accepts an optional `hm_note` and keeps it in the app only; the screen no longer sends one.)
 
 ### 7.3 Sending
 
@@ -286,7 +286,6 @@ For a task with `inputs.prefill` (Opus task), `/tasks/[id]` shows a **Revise req
 
 - **Message to Hiring Manager** at the top as a read-only information alert (`Alert severity="info"`, title "Message to Hiring Manager", text with line breaks kept). It can't be edited and isn't sent back.
 - Below it, the same fields, layout and rules as New requisition, prefilled from `inputs.prefill`: department → role filtered by department, store → region shown from Settings, employment type, openings, target start date, salary range, and the JD sections editor.
-- Optional "Note for the record" field (`hm_note`).
 - Button **Resubmit**. Field errors show under the fields as on New requisition; Opus errors use the existing alert / closed banner (`ClosedBanner`, `toSubmitError`).
 - After submit, the existing "sent" state; a done or closed task shows read only.
 
