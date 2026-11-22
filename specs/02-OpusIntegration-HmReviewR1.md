@@ -45,7 +45,7 @@ This replaces the "stays in `AiPrecheck`" behaviour of spec 01 §8.3 for round 1
 | # | Step | Detail |
 | :--- | :--- | :--- |
 | 1 | Create Requisition input `requisition_id` | `workflow_input_ws7sv258o` (`str`), sent by the app on Execute Case (spec 01 §6). |
-| 2 | Node input `requisition_id` | Wire it into "Hiring Manager Review Round 1" as `workflow_input_1a4neujk0` (`str`). **Not in the sample payload yet**: without it every webhook is rejected with `422` (§6.2). |
+| 2 | Node input `requisition_id` | Wire it into "Hiring Manager Review Round 1" as `workflow_input_4foftw3r4` (`str`). Without it every webhook is rejected with `422` (§6.2). |
 | 3 | Other node inputs | As in the input mapping (§6.4). |
 | 4 | Node outputs | The 14 outputs in §7.1 (all nullable, as in the sample). |
 | 5 | Webhook URL | `https://<app-domain>/api/opus/webhook?node=hm_review_r1` (production Vercel domain; preview URLs change on every deploy). |
@@ -92,7 +92,7 @@ export const OPUS_NODES = {
 | 3 | `node` is in `OPUS_NODES` | `400 unknown_node` |
 | 4 | Body matches `OpusOffPlatformPayloadSchema` (§6.5) | `400 invalid_payload` |
 | 5 | `workflow_id` equals `OPUS_CREATE_REQUISITION_WORKFLOW_ID` | `400 wrong_workflow` |
-| 6 | `requisition_id` (`workflow_input_1a4neujk0`) is present and names an existing requisition that has `db.opus_cases[id]` | `422 unknown_requisition`: the step **fails** in Opus at once |
+| 6 | `requisition_id` (`workflow_input_4foftw3r4`) is present and names an existing requisition that has `db.opus_cases[id]` | `422 unknown_requisition`: the step **fails** in Opus at once |
 | 7 | Idempotency: a task with the same `execution_id` and `node_id` exists → `200` with that task's ID, nothing created | – |
 | 8 | Status guard: the requisition should be `AiPrecheck` round 1. Otherwise log a warning and still create the task (Opus is the source of truth) | – |
 | 9 | Create the task and update the requisition (§6.6) | – |
@@ -104,7 +104,7 @@ export const OPUS_NODES = {
 
 ### 6.3 Correlation
 
-- **Requisition:** the `requisition_id` input `workflow_input_1a4neujk0`.
+- **Requisition:** the `requisition_id` input `workflow_input_4foftw3r4`.
 - **Execution:** `execution_id` is **required** and is stored before the `200` (Opus never resends it). It identifies the paused run that the callback must resume:
   - saved on the task (`task.execution_id`), next to the full `callback` block;
   - appended to `db.opus_cases[id].execution_ids` (one requisition can have several over its rounds).
@@ -115,7 +115,7 @@ export const OPUS_NODES = {
 
 | Input ID (Opus) | Label (front end) | Opus type | App field | Rule |
 | :--- | :--- | :--- | :--- | :--- |
-| `workflow_input_1a4neujk0` | Requisition ID | `str` | lookup key | Required |
+| `workflow_input_4foftw3r4` | Requisition ID | `str` | lookup key | Required |
 | `workflow_input_5q6u44ygg` | Message to Hiring Manager | `str` | task `message` | Read only. Shown as is (line breaks kept) |
 | `workflow_input_sbv9ddudn` | Department | `str` | `department` | |
 | `workflow_input_88pemvv0j` | Role | `str` | `role` | |
@@ -323,7 +323,7 @@ The app keeps storing `Full-time` / `Part-time` and `YYYY-MM-DD` internally; con
 
 ## 11. How to test
 
-1. **Locally, without Opus:** set the three env vars, give a requisition an `opus_cases` entry (submit one, or edit a seeded one), then `curl -X POST "http://localhost:3000/api/opus/webhook?node=hm_review_r1" -H "X-Valiram-Webhook-Secret: …" -H "content-type: application/json" --data @sample-hm-review-r1.json`, using the sample body with `"workflow_input_1a4neujk0": { "type": "str", "value": "REQ-…" }` added. Check the task screen and status. The callback goes to the real Opus URL with a spent token, so it tests the `401` "task closed" path.
+1. **Locally, without Opus:** set the three env vars, give a requisition an `opus_cases` entry (submit one, or edit a seeded one), then `curl -X POST "http://localhost:3000/api/opus/webhook?node=hm_review_r1" -H "X-Valiram-Webhook-Secret: …" -H "content-type: application/json" --data @sample-hm-review-r1.json`, using the sample body with `"workflow_input_4foftw3r4": { "type": "str", "value": "REQ-…" }` added. Check the task screen and status. The callback goes to the real Opus URL with a spent token, so it tests the `401` "task closed" path.
 2. **End-to-end:** deploy to Vercel, set the Builder URL, submit a requisition with a shift pattern that contradicts itself (as in the sample), and watch the Vercel logs for the webhook. Save the first real payload (token removed) as the reference sample.
 
 ## 12. Acceptance criteria
@@ -349,7 +349,7 @@ The app keeps storing `Full-time` / `Part-time` and `YYYY-MM-DD` internally; con
 
 | # | Question | Decision |
 | :--- | :--- | :--- |
-| 1 | How the webhook finds the requisition | Node input `workflow_input_1a4neujk0` (`str`) = requisition ID. Create Requisition sends it as `workflow_input_ws7sv258o`. |
+| 1 | How the webhook finds the requisition | Node input `workflow_input_4foftw3r4` (`str`) = requisition ID. Create Requisition sends it as `workflow_input_ws7sv258o`. |
 | 2 | `workflow_input_9knpanwdj` (node name), `workflow_input_wli0gftqb` (round) | Not mapped. The node is identified by its webhook URL. |
 | 3 | Message to Hiring Manager | Shown read only; not sent back. |
 | 4 | What the hiring manager can change | All 14 fields, on the New requisition form (§8). |

@@ -28,7 +28,7 @@ type Field =
 
 /** Hiring Manager Review Round 1: input ID (Opus) → app field (spec 02 §6.4). */
 export const HM_REVIEW_INPUTS: Record<string, Field> = {
-  workflow_input_1a4neujk0: "requisition_id",
+  workflow_input_4foftw3r4: "requisition_id",
   workflow_input_5q6u44ygg: "message",
   workflow_input_sbv9ddudn: "department",
   workflow_input_88pemvv0j: "role",
