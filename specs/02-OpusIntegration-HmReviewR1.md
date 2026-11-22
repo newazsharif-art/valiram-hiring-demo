@@ -184,7 +184,7 @@ export const OpusOffPlatformPayloadSchema = z.object({
 
 ### 7.1 Output mapping (app → Opus)
 
-`output_data` has the 14 IDs below as **bare values**. They are the same IDs and formats the app sends on Create Requisition (spec 01 §6).
+`output_data` has the 15 IDs below as **bare values**. They are the same IDs and formats the app sends on Create Requisition (spec 01 §6).
 
 | Output ID (Opus) | Label | Type | Value |
 | :--- | :--- | :--- | :--- |
@@ -202,6 +202,7 @@ export const OpusOffPlatformPayloadSchema = z.object({
 | `workflow_input_31tedhzgn` | What we look for | `str` | Points joined with `\n` |
 | `workflow_input_s3qdueq3e` | Benefits | `str` | Trimmed text |
 | `workflow_input_caakchhja` | Shift pattern | `str` | Trimmed text; `""` if empty |
+| `workflow_output_zk3o1np3u` | Requisition Id | `str` | The REQ ID, e.g. `REQ-2611-025`. **Not nullable**: without it Opus accepts the callback and then fails the node |
 
 Example:
 
@@ -235,7 +236,7 @@ The task screen (§8) sends the edited form as `{ requisition: RequisitionInput,
 
 1. validates with `RequisitionInputSchema` and the same department / role / store checks as `applyInput()`; errors come back per field like on New requisition;
 2. builds the 14 values in §7.1 from the validated input (store and region resolved from Settings);
-3. checks the keys against the task's stored `expected_output_schema`: any output ID the app would send that isn't declared → `500 opus_schema_mismatch` (logged with both key lists) and Opus is not called. Declared outputs the app doesn't know are left out (all are nullable);
+3. checks the keys against the task's stored `expected_output_schema`: any output ID the app would send that isn't declared → `500 opus_schema_mismatch` (logged with both key lists) and Opus is not called. Declared outputs the app doesn't know are left out if nullable; a declared **non-nullable** output the app doesn't fill → also `500 opus_schema_mismatch`, Opus is not called (Opus would otherwise answer `200` and fail the node);
 4. sends `{ "output_data": { … }, "status": "success" }`.
 
 `hm_note` is optional and stays in the app (review history and version note). It is not sent to Opus.

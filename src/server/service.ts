@@ -318,6 +318,14 @@ async function completeOpusTask(d: Db, t: TaskRecord, r: Requisition, body: Reco
     console.error(`[opus] callback task=${t.id} execution_id=${t.execution_id}: outputs not declared by the node: ${undeclared.join(", ")} | declared: ${declared.join(", ")}`);
     throw new ApiError(500, "opus_schema_mismatch", "The Opus step doesn't accept these fields, so nothing was sent. Please contact your system administrator.");
   }
+  // A declared output that isn't nullable and that the app doesn't fill would make Opus accept the
+  // callback (200) and then fail the node. Refuse before sending, so the run stays paused and fixable.
+  const schema = (t.expected_output_schema ?? {}) as Record<string, { is_nullable?: boolean }>;
+  const missingRequired = declared.filter((k) => schema[k]?.is_nullable === false && (output_data[k] === undefined || output_data[k] === null));
+  if (missingRequired.length) {
+    console.error(`[opus] callback task=${t.id} execution_id=${t.execution_id}: required outputs the app doesn't fill: ${missingRequired.join(", ")}`);
+    throw new ApiError(500, "opus_schema_mismatch", "The Opus step needs a field the app doesn't send, so nothing was sent. Please contact your system administrator.");
+  }
 
   const res = await sendCallback(d, t, { status: "success", output_data });
   if (res.status === 401) {

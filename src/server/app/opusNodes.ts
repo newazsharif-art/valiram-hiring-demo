@@ -294,8 +294,12 @@ export function buildHmReviewOutput(r: Requisition): Record<string, string | num
     if (i.id === REQUISITION_ID_INPUT) continue;
     out[i.id] = i.value(r);
   }
+  out[HM_REVIEW_REQUISITION_ID_OUTPUT] = r.id;
   return out;
 }
+
+/** HM Review Round 1 output "Requisition Id" (str, not nullable): passes the REQ ID on to the next nodes. */
+export const HM_REVIEW_REQUISITION_ID_OUTPUT = "workflow_output_zk3o1np3u";
 
 /** "YYYY-MM-DD" → "DD-MM-YYYY" (the HR final check node's date format, spec 03 §7.2). */
 export function toDashDate(iso: string): string {
