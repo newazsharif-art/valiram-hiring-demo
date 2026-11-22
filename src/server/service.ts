@@ -286,7 +286,7 @@ const FIELD_LABELS: [keyof Requisition, string][] = [
 
 /**
  * Completes a task that came from the real Opus webhook. Only on 200 does the requisition change.
- * - HM review (spec 02 §7). Body: { requisition, hm_note? }. 14 bare outputs; requisition → With HR.
+ * - HM review (spec 02 §7). Body: { requisition }. 15 bare outputs; requisition → With HR.
  * - HR final check (spec 03 §7). Body: { requisition, decision: "approve" | "return", hr_comments? }.
  *   Reviewed JSON + pass flag + message; Approve → Live, Return → Returned to HM next round.
  */
@@ -303,7 +303,6 @@ async function completeOpusTask(d: Db, t: TaskRecord, r: Requisition, body: Reco
     if (decision === "return" && !comments) throw new ApiError(400, "comment_required", "Add a comment so the hiring manager knows what to change.", { field: "hr_comments" });
   }
   const input = RequisitionInputSchema.parse(body.requisition);
-  const note = typeof body.hm_note === "string" ? body.hm_note.trim() : "";
 
   // Build the requisition as it will be saved, without touching the stored one yet.
   const next: Requisition = structuredClone(r);
@@ -348,7 +347,7 @@ async function completeOpusTask(d: Db, t: TaskRecord, r: Requisition, body: Reco
     t.title = approve ? "Reviewed requisition · approved" : "Reviewed requisition · returned to HM";
     return { task: toPublicTask(t), requisition: r };
   }
-  opusResubmitted(r, next, t.assignee_name, note, changed);
+  opusResubmitted(r, next, t.assignee_name, changed);
   t.status = "done";
   t.completed_at = nowIso();
   t.outcome = "resubmitted";

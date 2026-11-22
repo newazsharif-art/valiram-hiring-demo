@@ -157,13 +157,13 @@ export function opusReturnToHm(r: Requisition, round: number, message: string, t
  * The HM's changes were accepted by Opus (callback 200): save them and move the requisition to
  * With HR. The round stays the same; the HR task arrives through the next webhook.
  */
-export function opusResubmitted(r: Requisition, next: Requisition, actor: string, note: string, changed: string[]) {
+export function opusResubmitted(r: Requisition, next: Requisition, actor: string, changed: string[]) {
   const t = nowIso();
   const round = r.round;
   const rv = r.reviews.find((x) => x.round === round) ?? (r.reviews.push({ round, outcome: "returned" }), r.reviews[r.reviews.length - 1]);
-  rv.hm = { by: actor, at: t, note: note || undefined };
+  rv.hm = { by: actor, at: t };
   copyFields(r, next);
-  r.versions.push({ version: r.versions.length + 1, by: actor, by_role: "HM", at: t, change: `Revised after round ${round}${note ? `: ${note}` : ""}`, sections: next.jd_sections });
+  r.versions.push({ version: r.versions.length + 1, by: actor, by_role: "HM", at: t, change: `Revised after round ${round}`, sections: next.jd_sections });
   r.status = "WithHr";
   mark(r, "WithHr");
   log(r, `${actor} resubmitted (v${r.versions.length}). Sent to Opus; the requisition is now with HR.`);

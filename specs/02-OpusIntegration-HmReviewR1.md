@@ -239,7 +239,7 @@ The task screen (§8) sends the edited form as `{ requisition: RequisitionInput 
 3. checks the keys against the task's stored `expected_output_schema`: any output ID the app would send that isn't declared → `500 opus_schema_mismatch` (logged with both key lists) and Opus is not called. Declared outputs the app doesn't know are left out if nullable; a declared **non-nullable** output the app doesn't fill → also `500 opus_schema_mismatch`, Opus is not called (Opus would otherwise answer `200` and fail the node);
 4. sends `{ "output_data": { … }, "status": "success" }`.
 
-There is no comment field: the hiring manager only edits the requisition. (The server still accepts an optional `hm_note` and keeps it in the app only; the screen no longer sends one.)
+There is no comment field: the hiring manager only edits the requisition, and the app doesn't read or store a note for Opus tasks.
 
 ### 7.3 Sending
 
@@ -273,7 +273,7 @@ The request is logged with `execution_id`, task ID and HTTP status only; the tok
 ### 7.5 Requisition after a successful callback
 
 - All submitted fields are saved on the requisition (department, role, store, region, employment type, openings, target start, salary range, JD sections), using `applyInput()`.
-- Review round 1 `hm = { by, at, note }`; new JD version "Revised after round 1" (with the note, if any).
+- Review round 1 `hm = { by, at }`; new JD version "Revised after round 1".
 - `status = "WithHr"`, `stage_times.WithHr = now`. `round` stays `1`. **No** simulator event is queued.
 - Activity: "<HM> resubmitted (vN). Sent to Opus; the requisition is now with HR." If fields other than the JD changed, also "Changed: Store, Openings…".
 - The status changes **only after Opus answers `200`**. On any other answer the requisition stays `ReturnedToHm` and the task stays open (or closed on `401`).
