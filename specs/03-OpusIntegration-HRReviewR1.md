@@ -169,6 +169,7 @@ Sample (decoded):
 | :--- | :--- | :--- | :--- |
 | `workflow_output_84zgk25bn` | Reviewed JD Json | `json_string` | `JSON.stringify` of the reviewed requisition in the **same keys and formats as the input** (§7.2). Real runs send `Full time` and `DD/MM/YYYY`; the first sample had `Full-time` and `DD-MM-YYYY` |
 | `b52a7030-aba8-4467-a433-e05c4633166c` | Pass Status | `bool` | `true` = Approve, `false` = Return to hiring manager |
+| `725b0463-f2cb-4629-af87-635cffe5560d` | Pass Status (second, **not nullable**) | `bool` | Same value as above. Added in Builder on 2026-11-23; without it the app refuses to send (`opus_schema_mismatch`) |
 | `workflow_output_1ldrqy5bs` | HR Response Message | `str` | HR's comment, trimmed. Required on Return; `""` when empty on Approve |
 
 Values are bare, as in spec 02. The `json_string` output is a **string** containing JSON, not an object.
