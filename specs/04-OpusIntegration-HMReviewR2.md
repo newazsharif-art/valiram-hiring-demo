@@ -33,7 +33,7 @@ When HR returns the requisition at **Round 1 · HR final check** (spec 03 §7.6,
 | Inputs | 16 flat inputs | One `json_string` input | **Two**: the HR Response Message (`str`) and one `json_string` input with all fields, `requisition_id` included |
 | Message shown | Message to Hiring Manager (AI pre-check) | None | **HR Response Message** (HR's return comment) |
 | Outputs | 14 flat values + Requisition Id | Reviewed JSON, Pass Status ×2, HR message | **One**: the updated JSON (`json_string`) |
-| Formats in | `Full time`, `DD/MM/YYYY` | `Full time` / `Full-time`, `DD/MM/YYYY` / `DD-MM-YYYY` | `Full time`, `DD/MM/YYYY` (sample) |
+| Formats in | `Full time`, `DD/MM/YYYY` | `Full time` / `Full-time`, `DD/MM/YYYY` / `DD-MM-YYYY` | `Full time`, `DD-MM-YYYY` (real run; the first sample had `DD/MM/YYYY`) |
 | Who acts | Hiring manager | HR recruiter | Hiring manager |
 | Status before → after submit | `ReturnedToHm` r1 → `WithHr` r1 | `WithHr` r1 → `Live` or `ReturnedToHm` r2 | `ReturnedToHm` r2 → `WithHr` r2 |
 
@@ -45,9 +45,9 @@ The receiver, secret check, payload schema, idempotency, callback sending, schem
 
 | # | Step | Detail |
 | :--- | :--- | :--- |
-| 1 | Node inputs | `workflow_input_q8gs2ohgz` (`str`, HR Response Message) and `workflow_input_o66ljyr0o` (`json_string`, keys in §6.2, `requisition_id` included). Already in the sample. |
-| 2 | Node output | `workflow_output_a78p5ndvb` (`json_string`, "Updated Json", nullable), as in the sample (§7.1). |
-| 3 | Webhook URL | `https://<app-domain>/api/opus/webhook?node=hm_review_r2&secret=<OPUS_WEBHOOK_SECRET>`; on a preview URL also `&x-vercel-protection-bypass=<secret>` (spec 02 §4.1 steps 5–6a). |
+| 1 | Node inputs | `workflow_input_mffq3gx3y` (`str`, HR Response Message) and `workflow_input_1n862ffg8` (`json_string`, keys in §6.2, `requisition_id` included). Already in the sample. |
+| 2 | Node output | `workflow_output_0256au6te` (`json_string`, "Updated Json", **not nullable**), as in the real payload of 2026-11-23 (§7.1). |
+| 3 | Webhook URL | `https://<app-domain>/api/opus/webhook?node=hm_review_r2&secret=<OPUS_WEBHOOK_SECRET>`; on a preview URL also `&x-vercel-protection-bypass=<secret>` (spec 02 §4.1 steps 5–6a). Type a plain `&`: the test run had `&amp;secret=`, which the app reads as a parameter named `amp;secret`, so it answered `401` and Opus failed the case (§13 #10). |
 | 4 | Timeout | Keep the 15 s default. |
 | 5 | Publish the workflow | Then replay or run one test case (§11). |
 
@@ -65,8 +65,8 @@ hm_review_r2: {
   round: 2,
   node_id: "n_hm_revise_r2",          // same stage key as the simulator, so the stepper and node_map work
   label: "Hiring Manager Review Round 2",
-  inputs: { workflow_input_q8gs2ohgz: "message" },   // flat input, read as today
-  json_input: "workflow_input_o66ljyr0o",
+  inputs: { workflow_input_mffq3gx3y: "message" },   // flat input, read as today
+  json_input: "workflow_input_1n862ffg8",
   json_keys: REQ_JSON_KEYS,           // §6.2
   reply: "json",                      // §7.1
 },
@@ -84,7 +84,7 @@ Same endpoint and steps as spec 02 §6.2 and spec 03 §6.1, with these changes:
 
 | # | Step | Change |
 | :--- | :--- | :--- |
-| 6a | Parse `inputs.workflow_input_o66ljyr0o.value` (JSON string; an object is also accepted). | Missing, not valid JSON, or not an object → `422 invalid_json_input`, as in spec 03. |
+| 6a | Parse `inputs.workflow_input_1n862ffg8.value` (JSON string; an object is also accepted). | Missing, not valid JSON, or not an object → `422 invalid_json_input`, as in spec 03. |
 | 6 | `requisition_id` is read **from inside the JSON**. | Same `422 unknown_requisition` rule. |
 | 8 | Status guard: the requisition should be `ReturnedToHm` round 2 (HR returned it, spec 03 §7.6). Otherwise log a warning and still create the task, and bring the requisition to `ReturnedToHm` round 2 (§6.3). | – |
 
@@ -94,10 +94,10 @@ The HR Response Message is optional: missing or empty → the alert is not shown
 
 | Input | Label (front end) | App field | Rule |
 | :--- | :--- | :--- | :--- |
-| `workflow_input_q8gs2ohgz` (`str`) | HR Response Message | task `message` | Read only. Shown as is (line breaks kept). Not sent back |
-| `workflow_input_o66ljyr0o` (`json_string`) | – | the keys below | |
+| `workflow_input_mffq3gx3y` (`str`) | HR Response Message | task `message` | Read only. Shown as is (line breaks kept). Not sent back |
+| `workflow_input_1n862ffg8` (`json_string`) | – | the keys below | |
 
-Keys inside `workflow_input_o66ljyr0o` (`REQ_JSON_KEYS`, same as spec 03 §6.2):
+Keys inside `workflow_input_1n862ffg8` (`REQ_JSON_KEYS`, same as spec 03 §6.2):
 
 | JSON key | Label (front end) | App field | Rule |
 | :--- | :--- | :--- | :--- |
@@ -108,7 +108,7 @@ Keys inside `workflow_input_o66ljyr0o` (`REQ_JSON_KEYS`, same as spec 03 §6.2):
 | `region` | Region | `region` | Shown only; derived from the store |
 | `employment_type` | Employment type | `employment_type` | `Full time` → `Full-time` (also accepts `Full-time`) |
 | `openings` | Openings | `openings` | Integer |
-| `target_start_date` | Target Start Date | `target_start` | `DD/MM/YYYY` → `YYYY-MM-DD` (also accepts `DD-MM-YYYY`, `YYYY-MM-DD`). `04/01/2027` is **4 Jan 2027** |
+| `target_start_date` | Target Start Date | `target_start` | `DD-MM-YYYY` → `YYYY-MM-DD` (also accepts `DD/MM/YYYY`, `YYYY-MM-DD`). `04-01-2027` is **4 Jan 2027** |
 | `base_salary_from` | Base salary from | `base_min` | Number |
 | `base_salary_to` | Base salary to | `base_max` | Number |
 | `about_the_role` | About the role | `jd.about` | |
@@ -121,7 +121,7 @@ Keys inside `workflow_input_o66ljyr0o` (`REQ_JSON_KEYS`, same as spec 03 §6.2):
 - Missing or unreadable fields fall back to the requisition, with a warning, as in spec 02. Values that don't match Settings go to `inputs.unmatched`, as in spec 02.
 - Keys the app doesn't know are kept in the stored JSON (§6.3) and sent back unchanged (§7.2).
 
-Sample (decoded; the pasted sample's quoting is broken, the real payload sends `value` as an escaped JSON string):
+Real payload (REQ-2611-033, 2026-11-23, decoded; `value` arrives as an escaped JSON string):
 
 ```json
 {
@@ -132,7 +132,7 @@ Sample (decoded; the pasted sample's quoting is broken, the real payload sends `
   "region": "KL City",
   "employment_type": "Full time",
   "openings": 2,
-  "target_start_date": "04/01/2027",
+  "target_start_date": "04-01-2027",
   "base_salary_from": 1800,
   "base_salary_to": 2300,
   "about_the_role": "Join our store team as the first point of contact for shoppers…",
@@ -178,16 +178,16 @@ Sample (decoded; the pasted sample's quoting is broken, the real payload sends `
 
 | Output ID (Opus) | Display name | Type | Value |
 | :--- | :--- | :--- | :--- |
-| `workflow_output_a78p5ndvb` | Updated Json | `json_string` | `JSON.stringify` of the updated requisition in the **same keys and formats as the input** (§7.2) |
+| `workflow_output_0256au6te` | Updated Json | `json_string` | `JSON.stringify` of the updated requisition in the **same keys and formats as the input** (§7.2) |
 
-The value is a **string** containing JSON, not an object. The output is nullable, but the app always sends it.
+The value is a **string** containing JSON, not an object. The output is **not nullable**: without it Opus accepts the callback and then fails the node, so the app refuses to send if it is missing (spec 02 §7.2 step 3).
 
 Example:
 
 ```json
 {
   "output_data": {
-    "workflow_output_a78p5ndvb": "{\"requisition_id\":\"REQ-2611-031\",\"department\":\"Retail Operations\",\"role\":\"Retail Sales Associate\",\"store\":\"Mid Valley Megamall\",\"region\":\"KL City\",\"employment_type\":\"Full time\",\"openings\":2,\"target_start_date\":\"04/01/2027\",\"base_salary_from\":1800,\"base_salary_to\":2300,\"about_the_role\":\"…\",\"what_you_will_do\":\"…\\n…\",\"what_we_look_for\":\"…\\n…\",\"benefits\":\"…\",\"shift_pattern\":\"Store open 10am-10pm. Rotating 8-hour shifts…\"}"
+    "workflow_output_0256au6te": "{\"requisition_id\":\"REQ-2611-031\",\"department\":\"Retail Operations\",\"role\":\"Retail Sales Associate\",\"store\":\"Mid Valley Megamall\",\"region\":\"KL City\",\"employment_type\":\"Full time\",\"openings\":2,\"target_start_date\":\"04-01-2027\",\"base_salary_from\":1800,\"base_salary_to\":2300,\"about_the_role\":\"…\",\"what_you_will_do\":\"…\\n…\",\"what_we_look_for\":\"…\\n…\",\"benefits\":\"…\",\"shift_pattern\":\"Store open 10am-10pm. Rotating 8-hour shifts…\"}"
   },
   "status": "success"
 }
@@ -216,7 +216,7 @@ If the hiring manager changes nothing, the JSON has the same values as received.
 The task screen (§8) posts `{ requisition: RequisitionInput }` to `POST /api/tasks/{id}/complete`, as in spec 02. `completeOpusTask()`, for a node with `reply: "json"`:
 
 1. validates `requisition` with `RequisitionInputSchema` and the same department / role / store checks as New requisition; errors come back per field;
-2. builds `{ workflow_output_a78p5ndvb: buildReviewedJson(source_json, next) }`;
+2. builds `{ workflow_output_0256au6te: buildReviewedJson(source_json, next) }`;
 3. checks the key against the task's `expected_output_schema` (undeclared output, or a declared non-nullable output the app doesn't fill → `500 opus_schema_mismatch`, Opus not called);
 4. sends `{ "output_data": { … }, "status": "success" }` with `sendCallback()` to the task's `execution_id`.
 
@@ -259,7 +259,7 @@ The alert title and subtitle come from `inputs.returned_by`: `"AI pre-check"` �
 
 | File | Change |
 | :--- | :--- |
-| `src/server/app/opusNodes.ts` | `hm_review_r2` node; `OpusNode.reply`; rename `REQ_JSON_KEYS`; `HM_REVIEW_R2_OUTPUT = "workflow_output_a78p5ndvb"`; `buildHmUpdatedJsonOutput(source_json, r)`; `opusNodeById(node_id)`. |
+| `src/server/app/opusNodes.ts` | `hm_review_r2` node; `OpusNode.reply`; rename `REQ_JSON_KEYS`; `HM_REVIEW_R2_OUTPUT = "workflow_output_0256au6te"`; `buildHmUpdatedJsonOutput(source_json, r)`; `opusNodeById(node_id)`. |
 | `src/server/app/webhook.ts` | Per-node status guard, task inputs (`returned_by`, `source_json` for HM round 2) and requisition update (§6.3). |
 | `src/server/flows.ts` | `opusHmReceived()` (§6.3). |
 | `src/server/service.ts` | `completeOpusTask()` routes by node `reply`; `"json"` branch (§7.3); then `opusResubmitted()` as today. |
@@ -277,11 +277,11 @@ The alert title and subtitle come from `inputs.returned_by`: `"AI pre-check"` �
 ## 12. Acceptance criteria
 
 1. When Opus reaches the node, the hiring manager gets an open task "Revise requisition · <role>" and the requisition shows **Returned to HM, round 2**.
-2. The screen shows "Round 2 of 3", "Returned by <HR name> (HR)", the HR Response Message read only with line breaks, and all fields prefilled from the JSON (`Full time` → Full-time, `04/01/2027` → 4 Jan 2027, store name matched).
+2. The screen shows "Round 2 of 3", "Returned by <HR name> (HR)", the HR Response Message read only with line breaks, and all fields prefilled from the JSON (`Full time` → Full-time, `04-01-2027` → 4 Jan 2027, store name matched).
 3. A requisition that is not `ReturnedToHm` round 2 when the webhook arrives still gets the task, is moved to **Returned to HM, round 2**, and a warning is logged.
 4. An input that isn't valid JSON, or has no known `requisition_id` → `422`, nothing created. Secret, node, body and workflow checks behave as in spec 02.
 5. The same payload sent twice creates one task.
-6. **Resubmit** without changes: Opus receives exactly `workflow_output_a78p5ndvb`, a JSON string with the same values and formats as received (unknown keys kept), and returns `200`; the task is done and the requisition is **With HR, round 2**, version "Revised after round 2".
+6. **Resubmit** without changes: Opus receives exactly `workflow_output_0256au6te`, a JSON string with the same values and formats as received (unknown keys kept), and returns `200`; the task is done and the requisition is **With HR, round 2**, version "Revised after round 2".
 7. **Resubmit** with edits: the JSON carries the edits in the input formats; the requisition holds them; activity lists the changed fields.
 8. If the callback fails (network error, `422`, timeout), the requisition stays **Returned to HM, round 2** and the task stays open; a spent token closes the task with the existing message.
 9. Invalid fields (e.g. role not in the department, fewer than 3 duties) show field errors and Opus is not called.
@@ -294,11 +294,12 @@ The alert title and subtitle come from `inputs.returned_by`: `"AI pre-check"` �
 | # | Question | Decision |
 | :--- | :--- | :--- |
 | 1 | `workflow_id` of the payload | The same "Valiram - Publish JD" workflow (`OPUS_CREATE_REQUISITION_WORKFLOW_ID`); the existing `wrong_workflow` check applies. |
-| 2 | Outputs | Only `workflow_output_a78p5ndvb` (nullable), confirmed. No separate Requisition Id or Pass Status output; the REQ ID travels inside the JSON. |
-| 3 | Format of the updated JSON | Same keys and formats as this node's input (`Full time`, `DD/MM/YYYY`), unknown keys kept, as in spec 03. |
+| 2 | Outputs | Only `workflow_output_0256au6te`, **not nullable** (real payload). No separate Requisition Id or Pass Status output; the REQ ID travels inside the JSON. |
+| 3 | Format of the updated JSON | Same keys and formats as this node's input, as received (real run: `Full time`, `DD-MM-YYYY`), unknown keys kept, as in spec 03. |
 | 4 | HR Response Message | Shown read only; not sent back. Saved on review round 1 if HR's comment isn't there already. |
 | 5 | What the hiring manager can change | All fields, on the New requisition form (as spec 02). No note field. |
 | 6 | Status after a successful submit | `WithHr`, round stays 2, set only after Opus answers `200`. HR round 2 task comes from a later webhook. |
 | 7 | Requisition not in `ReturnedToHm` round 2 on receipt | Task created anyway; requisition brought to `ReturnedToHm` round 2 (Opus is the source of truth). |
 | 8 | Hiring Manager Review Round 3 | Later spec, with its real input/output IDs. If it has the same shape, it becomes one more `OPUS_NODES` entry (`hm_review_r3`, `reply: "json"`). |
-| 9 | Date `04/01/2027` | `DD/MM/YYYY` → 4 Jan 2027, as in specs 01–03. |
+| 9 | Date `04-01-2027` | Day first → 4 Jan 2027, as in specs 01–03. The reply keeps the separator Opus sent. |
+| 10 | IDs and output nullability | Taken from the real webhook of case REQ-2611-033 on 2026-11-23 (logged by `/api/opus/webhook/log`): inputs `workflow_input_mffq3gx3y` (str) and `workflow_input_1n862ffg8` (json_string), output `workflow_output_0256au6te` (json_string, not nullable). They replace the IDs of the first sample. |
