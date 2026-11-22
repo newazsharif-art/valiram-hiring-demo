@@ -10,8 +10,8 @@ import type { Db } from "../store";
 import { nowIso } from "../store";
 import type { OffPlatformPayload, OpusOffPlatformPayload } from "../opus/types";
 import { ApiError } from "../service";
-import { opusReturnToHm } from "../flows";
-import { OPUS_NODES, buildPrefill, readInputs } from "./opusNodes";
+import { opusHrReceived, opusReturnToHm } from "../flows";
+import { InvalidJsonInput, OPUS_NODES, buildPrefill, readInputs, type ReadInputs } from "./opusNodes";
 
 export function receiveOffPlatformTask(db: Db, p: OffPlatformPayload): TaskRecord {
   const req = db.requisitions.find(
@@ -66,8 +66,15 @@ export function receiveOffPlatformTask(db: Db, p: OffPlatformPayload): TaskRecor
  */
 export function receiveOpusTask(db: Db, nodeKey: string, p: OpusOffPlatformPayload): { task: TaskRecord; created: boolean } {
   const node = OPUS_NODES[nodeKey];
-  const read = readInputs(node, p.inputs);
   const tag = `[opus] webhook node=${nodeKey} execution_id=${p.execution_id}`;
+  let read: ReadInputs;
+  try {
+    read = readInputs(node, p.inputs);
+  } catch (e) {
+    if (!(e instanceof InvalidJsonInput)) throw e;
+    console.error(`${tag}: input ${e.inputId} is missing or not a JSON object. Rejected with 422.`);
+    throw new ApiError(422, "invalid_json_input", `Input ${e.inputId} must be a JSON object.`);
+  }
   const req = read.requisition_id ? db.requisitions.find((r) => r.id === read.requisition_id) : undefined;
   if (!req || !db.opus_cases[req.id]) {
     console.error(`${tag} requisition_id=${read.requisition_id ?? "(missing)"}: no requisition with an Opus case. Rejected with 422.`);
@@ -83,14 +90,23 @@ export function receiveOpusTask(db: Db, nodeKey: string, p: OpusOffPlatformPaylo
   if (!p.callback.url.replace(/\/+$/, "").endsWith(`/callback/${p.execution_id}`)) {
     console.warn(`${tag} requisition_id=${req.id}: callback.url does not end with /callback/<execution_id>; using it as sent.`);
   }
-  if (req.status !== "AiPrecheck" || req.round !== node.round) {
-    console.warn(`${tag} requisition_id=${req.id}: requisition is ${req.status} round ${req.round}, expected AiPrecheck round ${node.round}. Creating the task anyway.`);
+  const expected = node.task_type === "HR_JD_CHECK" ? ["WithHr", "AiPrecheck"] : ["AiPrecheck"];
+  if (!expected.includes(req.status) || req.round !== node.round) {
+    console.warn(`${tag} requisition_id=${req.id}: requisition is ${req.status} round ${req.round}, expected ${expected.join(" or ")} round ${node.round}. Creating the task anyway.`);
   }
 
   const { prefill, unmatched, fallbacks } = buildPrefill(read.values, req, db.settings);
   if (fallbacks.length) console.warn(`${tag} requisition_id=${req.id}: missing or unreadable inputs, prefilled from the requisition: ${fallbacks.join(", ")}`);
 
-  const hm = db.settings.users.find((u) => u.id === req.hm_user)!;
+  const isHr = node.task_type === "HR_JD_CHECK";
+  const users = db.settings.users;
+  const assignee = isHr
+    ? (users.find((u) => u.id === req.hr_assignee) ?? users.find((u) => u.role === "HR_RECRUITER")!)
+    : users.find((u) => u.id === req.hm_user)!;
+  if (isHr && !req.hr_assignee) {
+    req.hr_assignee = assignee.id;
+    req.hr_name = assignee.name;
+  }
   db.seq.task += 1;
   const task: TaskRecord = {
     id: `T-${String(db.seq.task).padStart(4, "0")}`,
@@ -100,22 +116,24 @@ export function receiveOpusTask(db: Db, nodeKey: string, p: OpusOffPlatformPaylo
     workflow_name: p.workflow_name,
     node_id: node.node_id,
     requisition_id: req.id,
-    title: `Revise requisition · ${req.role}`,
+    title: `${isHr ? "Review" : "Revise"} requisition · ${req.role}`,
     round: node.round,
-    assignee: hm.id,
-    assignee_name: hm.name,
+    assignee: assignee.id,
+    assignee_name: assignee.name,
     status: "open",
     created_at: nowIso(),
     reminders: [],
-    inputs: {
-      task_type: node.task_type,
-      requisition_id: req.id,
-      round: node.round,
-      returned_by: "AI pre-check",
-      message: read.message,
-      prefill,
-      unmatched,
-    },
+    inputs: isHr
+      ? { task_type: node.task_type, requisition_id: req.id, round: node.round, prefill, unmatched, source_json: read.json ?? {} }
+      : {
+          task_type: node.task_type,
+          requisition_id: req.id,
+          round: node.round,
+          returned_by: "AI pre-check",
+          message: read.message,
+          prefill,
+          unmatched,
+        },
     expected_output_schema: p.expected_output_schema as TaskRecord["expected_output_schema"],
     callback: { url: p.callback.url, token: p.callback.token, token_header: p.callback.token_header }, // stays server-side
     source: "opus",
@@ -125,7 +143,8 @@ export function receiveOpusTask(db: Db, nodeKey: string, p: OpusOffPlatformPaylo
   const rec = db.opus_cases[req.id];
   rec.execution_ids = [...(rec.execution_ids ?? []).filter((x) => x !== p.execution_id), p.execution_id];
 
-  opusReturnToHm(req, node.round, read.message, task.id, hm.name, node.label);
-  console.info(`${tag} requisition_id=${req.id}: task ${task.id} created for ${hm.name}.`);
+  if (isHr) opusHrReceived(req, node.round, task.id, assignee.name, node.label);
+  else opusReturnToHm(req, node.round, read.message, task.id, assignee.name, node.label);
+  console.info(`${tag} requisition_id=${req.id}: task ${task.id} created for ${assignee.name}.`);
   return { task, created: true };
 }

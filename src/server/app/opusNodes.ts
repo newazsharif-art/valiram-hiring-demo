@@ -1,5 +1,5 @@
 /**
- * Real Opus Off-Platform nodes the app handles (spec 02).
+ * Real Opus Off-Platform nodes the app handles (spec 02, spec 03).
  * Opus doesn't say which node sent a webhook, so each node has its own webhook URL:
  *   POST /api/opus/webhook?node=<key>
  * Input and output IDs live here, so a Builder change only touches this file.
@@ -46,13 +46,46 @@ export const HM_REVIEW_INPUTS: Record<string, Field> = {
   workflow_input_qgtom58kp: "shift_pattern",
 };
 
+/**
+ * Round 1 · HR final check: keys inside the single `json_string` input (spec 03 §6.2).
+ * The same keys are sent back in the "Reviewed JD Json" output (spec 03 §7.2).
+ */
+export const HR_REVIEW_JSON_KEYS: Record<string, Field> = {
+  requisition_id: "requisition_id",
+  department: "department",
+  role: "role",
+  store: "store",
+  region: "region",
+  employment_type: "employment_type",
+  openings: "openings",
+  target_start_date: "target_start",
+  base_salary_from: "base_min",
+  base_salary_to: "base_max",
+  about_the_role: "about",
+  what_you_will_do: "duties",
+  what_we_look_for: "requirements",
+  benefits: "benefits",
+  shift_pattern: "shift_pattern",
+};
+
+/** Round 1 · HR final check outputs (spec 03 §7.1). */
+export const HR_REVIEW_OUTPUTS = {
+  reviewed_json: "workflow_output_84zgk25bn",
+  pass_status: "b52a7030-aba8-4467-a433-e05c4633166c",
+  message: "workflow_output_1ldrqy5bs",
+} as const;
+
 export interface OpusNode {
   task_type: TaskType;
   round: number;
   /** App stage key (same as the simulator's), used by the stepper and Settings node_map. */
   node_id: string;
   label: string;
-  inputs: Record<string, Field>;
+  /** Flat inputs: input ID → app field (spec 02). */
+  inputs?: Record<string, Field>;
+  /** One `json_string` input holding all fields (spec 03): its input ID, and JSON key → app field. */
+  json_input?: string;
+  json_keys?: Record<string, Field>;
 }
 
 export const OPUS_NODES: Record<string, OpusNode> = {
@@ -62,6 +95,14 @@ export const OPUS_NODES: Record<string, OpusNode> = {
     node_id: "n_hm_revise_r1",
     label: "Hiring Manager Review Round 1",
     inputs: HM_REVIEW_INPUTS,
+  },
+  hr_review_r1: {
+    task_type: "HR_JD_CHECK",
+    round: 1,
+    node_id: "n_hr_verify_r1",
+    label: "Round 1 · HR final check",
+    json_input: "workflow_input_5x656gas6",
+    json_keys: HR_REVIEW_JSON_KEYS,
   },
 };
 
@@ -123,16 +164,48 @@ export interface ReadInputs {
   message: string;
   /** Raw values by app field, unwrapped from { type, value }. */
   values: Partial<Record<Field, unknown>>;
+  /** JSON-input nodes: the decoded object as received (kept to build the reply). */
+  json?: Record<string, unknown>;
 }
 
-/** Unwraps the mapped inputs. Unmapped inputs (node name, round, anything new) are ignored. */
+/** Decodes a `json_string` value (a JSON string; an object is also accepted). Undefined if it isn't a JSON object. */
+function decodeJsonObject(v: unknown): Record<string, unknown> | undefined {
+  let o: unknown = v;
+  if (typeof v === "string") {
+    try {
+      o = JSON.parse(v);
+    } catch {
+      return undefined;
+    }
+  }
+  return o && typeof o === "object" && !Array.isArray(o) ? (o as Record<string, unknown>) : undefined;
+}
+
+/**
+ * Unwraps the mapped inputs. Unmapped inputs (node name, round, anything new) are ignored.
+ * For a JSON-input node, throws `invalid_json_input` if the input is missing or not a JSON object.
+ */
 export function readInputs(node: OpusNode, inputs: Record<string, { value?: unknown }>): ReadInputs {
   const values: Partial<Record<Field, unknown>> = {};
-  for (const [id, field] of Object.entries(node.inputs)) {
+  let json: Record<string, unknown> | undefined;
+  if (node.json_input) {
+    json = decodeJsonObject(inputs[node.json_input]?.value);
+    if (!json) throw new InvalidJsonInput(node.json_input);
+    for (const [key, field] of Object.entries(node.json_keys ?? {})) {
+      if (key in json) values[field] = json[key];
+    }
+  }
+  for (const [id, field] of Object.entries(node.inputs ?? {})) {
     if (id in inputs) values[field] = inputs[id]?.value;
   }
   const rid = str(values.requisition_id)?.trim();
-  return { requisition_id: rid || undefined, message: str(values.message) ?? "", values };
+  return { requisition_id: rid || undefined, message: str(values.message) ?? "", values, json };
+}
+
+export class InvalidJsonInput extends Error {
+  constructor(public inputId: string) {
+    super(`Input ${inputId} is missing or is not a JSON object`);
+  }
 }
 
 export interface Prefill {
@@ -222,4 +295,47 @@ export function buildHmReviewOutput(r: Requisition): Record<string, string | num
     out[i.id] = i.value(r);
   }
   return out;
+}
+
+/** "YYYY-MM-DD" → "DD-MM-YYYY" (the HR final check node's date format, spec 03 §7.2). */
+export function toDashDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : iso;
+}
+
+/**
+ * "Reviewed JD Json" for the HR final check (spec 03 §7.2): the JSON as received, with the known keys
+ * overwritten by the reviewed requisition in this node's input formats. Unknown keys and key order are kept.
+ */
+export function buildReviewedJson(source: Record<string, unknown>, r: Requisition): string {
+  const v: Record<Field, string | number> = {
+    requisition_id: r.id,
+    message: "",
+    department: r.department,
+    role: r.role,
+    store: r.store,
+    region: r.region,
+    employment_type: r.employment_type,
+    openings: r.openings,
+    target_start: toDashDate(r.target_start),
+    base_min: r.base_min,
+    base_max: r.base_max,
+    about: r.jd_sections.about.trim(),
+    duties: r.jd_sections.duties.join("\n"),
+    requirements: r.jd_sections.requirements.join("\n"),
+    benefits: r.jd_sections.benefits.trim(),
+    shift_pattern: (r.jd_sections.shift_pattern ?? "").trim(),
+  };
+  const out: Record<string, unknown> = { ...source };
+  for (const [key, field] of Object.entries(HR_REVIEW_JSON_KEYS)) out[key] = v[field];
+  return JSON.stringify(out);
+}
+
+/** The three HR final check outputs (spec 03 §7.1). Bare values. */
+export function buildHrReviewOutput(source: Record<string, unknown>, r: Requisition, approve: boolean, message: string): Record<string, string | boolean> {
+  return {
+    [HR_REVIEW_OUTPUTS.reviewed_json]: buildReviewedJson(source, r),
+    [HR_REVIEW_OUTPUTS.pass_status]: approve,
+    [HR_REVIEW_OUTPUTS.message]: message,
+  };
 }

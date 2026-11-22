@@ -162,6 +162,15 @@ export function opusResubmitted(r: Requisition, next: Requisition, actor: string
   const round = r.round;
   const rv = r.reviews.find((x) => x.round === round) ?? (r.reviews.push({ round, outcome: "returned" }), r.reviews[r.reviews.length - 1]);
   rv.hm = { by: actor, at: t, note: note || undefined };
+  copyFields(r, next);
+  r.versions.push({ version: r.versions.length + 1, by: actor, by_role: "HM", at: t, change: `Revised after round ${round}${note ? `: ${note}` : ""}`, sections: next.jd_sections });
+  r.status = "WithHr";
+  mark(r, "WithHr");
+  log(r, `${actor} resubmitted (v${r.versions.length}). Sent to Opus; the requisition is now with HR.`);
+  if (changed.length) log(r, `Changed: ${changed.join(", ")}.`);
+}
+
+function copyFields(r: Requisition, next: Requisition) {
   r.department = next.department;
   r.role = next.role;
   r.store_id = next.store_id;
@@ -174,11 +183,65 @@ export function opusResubmitted(r: Requisition, next: Requisition, actor: string
   r.target_start = next.target_start;
   r.jd_sections = next.jd_sections;
   r.template_version = next.template_version;
-  r.versions.push({ version: r.versions.length + 1, by: actor, by_role: "HM", at: t, change: `Revised after round ${round}${note ? `: ${note}` : ""}`, sections: next.jd_sections });
-  r.status = "WithHr";
-  mark(r, "WithHr");
-  log(r, `${actor} resubmitted (v${r.versions.length}). Sent to Opus; the requisition is now with HR.`);
+}
+
+/**
+ * The real Opus run paused at an HR final check node (spec 03 §6.3). Fields are not changed.
+ * Arriving straight from AiPrecheck means the pre-check passed with no HM review.
+ */
+export function opusHrReceived(r: Requisition, round: number, taskId: string, hrName: string, nodeLabel: string) {
+  if (r.status === "AiPrecheck") {
+    const rv = r.reviews.find((x) => x.round === round) ?? (r.reviews.push({ round, outcome: "pending" }), r.reviews[r.reviews.length - 1]);
+    rv.precheck = { pass: true, at: nowIso(), findings: [] };
+    r.status = "WithHr";
+    mark(r, "WithHr");
+    log(r, `AI pre-check round ${round} passed.`);
+  }
+  log(r, `Opus paused at ${nodeLabel}; task ${taskId} assigned to ${hrName}.`);
+}
+
+/**
+ * HR's decision was accepted by Opus (callback 200, spec 03 §7.4–7.6). HR's field values are saved for
+ * both decisions. Approve → job posting generated and Live at once (no simulator job). Return → round + 1,
+ * ReturnedToHm; the HM task arrives through the next webhook.
+ */
+export function opusHrDecided(r: Requisition, next: Requisition, actor: string, approve: boolean, comments: string, changed: string[]) {
+  const t = nowIso();
+  const round = r.round;
+  const edited = changed.length > 0 || !sameJd(next.jd_sections, r.jd_sections);
+  const rv = r.reviews.find((x) => x.round === round) ?? (r.reviews.push({ round, outcome: "pending" }), r.reviews[r.reviews.length - 1]);
+  rv.hr = { decision: approve ? "approve" : "reject", by: actor, at: t, comments: comments || undefined, edited };
+  copyFields(r, next);
+  if (edited) {
+    r.versions.push({ version: r.versions.length + 1, by: actor, by_role: "HR", at: t, change: "Edits during HR review", sections: next.jd_sections });
+  }
+  if (approve) {
+    rv.outcome = "approved";
+    if (r.versions.length) r.versions[r.versions.length - 1].published = true;
+    log(r, `${actor} approved${edited ? " with edits" : ""}. Sent to Opus.`);
+    if (changed.length) log(r, `Changed: ${changed.join(", ")}.`);
+    r.status = "JobPosting";
+    mark(r, "JobPosting");
+    publishPosting(r);
+    return;
+  }
+  rv.outcome = "returned";
+  log(r, `${actor} returned the requisition to ${r.hm_name} (round ${round})${comments ? `: "${comments}"` : "."}`);
   if (changed.length) log(r, `Changed: ${changed.join(", ")}.`);
+  r.round = round + 1;
+  r.reviews.push({ round: r.round, outcome: "pending" });
+  r.status = "ReturnedToHm";
+  mark(r, "ReturnedToHm");
+}
+
+/** Job posting PDF generated and the JD live (shared by the simulator and the Opus path). */
+function publishPosting(r: Requisition) {
+  r.posting = { generated_at: nowIso(), file_name: `job_post_${r.id}.pdf` };
+  r.status = "Live";
+  mark(r, "Live");
+  r.screening = "open";
+  r.completed_at = nowIso();
+  log(r, "Job posting generated: LinkedIn-style post as PDF (demo). JD live.");
 }
 
 function rejectRequisition(db: Db, r: Requisition) {
@@ -196,15 +259,9 @@ export function runPostingStep(db: Db, r: Requisition) {
   db.events = db.events.filter((e) => e.reqId !== r.id);
   const job = job1(db, r);
   enterNode(job, "n_job_posting");
-  const t = nowIso();
-  r.posting = { generated_at: t, file_name: `job_post_${r.id}.pdf` };
-  r.status = "Live";
-  mark(r, "Live");
-  r.screening = "open";
-  log(r, "Job posting generated: LinkedIn-style post as PDF (demo). JD live.");
+  publishPosting(r);
   enterNode(job, "n_notify");
-  finishJob(job, { job_post_pdf: r.posting.file_name, status: "live" });
-  r.completed_at = nowIso();
+  finishJob(job, { job_post_pdf: r.posting!.file_name, status: "live" });
   log(r, "Flow 1 completed. Slack #recruitment notified.");
 }
 

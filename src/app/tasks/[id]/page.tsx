@@ -6,6 +6,7 @@ import { ErrorNote, Loading } from "@/components/ui";
 import { HrVerifyTask } from "@/components/tasks/HrVerifyTask";
 import { HmReviseTask } from "@/components/tasks/HmReviseTask";
 import { OpusReviseTask } from "@/components/tasks/OpusReviseTask";
+import { OpusHrReviewTask } from "@/components/tasks/OpusHrReviewTask";
 import { ShortlistReviewTask } from "@/components/tasks/ShortlistReviewTask";
 
 /** The task type picks the screen: HR verification, HM revise (variant), or Shortlist review. */
@@ -18,7 +19,12 @@ export default function TaskPage() {
   const reload = () => res.reload();
   switch (task.task_type) {
     case "HR_JD_CHECK":
-      return <HrVerifyTask key={task.id} task={task} requisition={requisition} onChanged={reload} />;
+      // HR final check from the real Opus webhook carries a form prefill (spec 03 §8).
+      return task.inputs.prefill ? (
+        <OpusHrReviewTask key={task.id} task={task} requisition={requisition} onChanged={reload} />
+      ) : (
+        <HrVerifyTask key={task.id} task={task} requisition={requisition} onChanged={reload} />
+      );
     case "HM_JD_REVISE":
       // Tasks from the real Opus webhook carry a form prefill (spec 02 §8); simulator tasks keep the JD-only screen.
       return task.inputs.prefill ? (

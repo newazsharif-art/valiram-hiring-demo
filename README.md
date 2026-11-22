@@ -69,7 +69,7 @@ API (all JSON unless noted; the current user comes from the `vh_user` cookie):
 | `GET /api/demo/state` · `POST /api/demo/{reset\|precheck\|close-screening\|advance}` | Presenter actions |
 | `POST /api/opus-sim/callback/{executionId}` | Simulated Opus callback endpoint (header `X-Opus-Callback-Token`) |
 | `GET /api/opus-sim/jobs/{id}/audit` | Simulated `GET /job/{id}/audit` (no timestamps, like the real one) |
-| `POST /api/opus/webhook?node=hm_review_r1` | Real Opus Off-Platform webhook (spec 02). Header `X-Valiram-Webhook-Secret` (or `&secret=` if Opus can't send headers). 503 when the integration is off |
+| `POST /api/opus/webhook?node=hm_review_r1` / `?node=hr_review_r1` | Real Opus Off-Platform webhook (spec 02, spec 03). Header `X-Valiram-Webhook-Secret` (or `&secret=` if Opus can't send headers). 503 when the integration is off |
 
 ## How the simulator behaves
 
@@ -151,6 +151,8 @@ src/app/api/...    route handlers
 **Already connected:** submitting a requisition creates a real Opus case for the "Create Requisition" workflow (v1 Case API, initiate + execute) when `OPUS_SERVICE_KEY` and `OPUS_CREATE_REQUISITION_WORKFLOW_ID` are set. The case ID is kept server-side in `db.opus_cases` (in Redis on Vercel). If Opus can't be reached or rejects the request, the requisition is not submitted and the user sees a plain-language error. The simulator still drives the rest of the demo flow. See `specs/01-OpusIntegration-CreateRequisition.md`.
 
 **Hiring Manager Review Round 1 (spec 02):** when the Opus run pauses at that Off-Platform node, Opus POSTs to `https://<app-domain>/api/opus/webhook?node=hm_review_r1` with header `X-Valiram-Webhook-Secret: <OPUS_WEBHOOK_SECRET>` (or `&secret=<OPUS_WEBHOOK_SECRET>` in the URL when the node can't send headers; on a protected preview also `&x-vercel-protection-bypass=<secret>`). The app finds the requisition by the `requisition_id` input (`workflow_input_1a4neujk0`), stores `execution_id` and the callback, creates a "Revise requisition" task for the hiring manager and sets the requisition to Returned to HM. On **Resubmit** it POSTs the 14 fields to `…/v1/execution/callback/{execution_id}` and, on 200, sets the requisition to With HR. Node input/output IDs live in `src/server/app/opusNodes.ts`. See `specs/02-OpusIntegration-HmReviewR1.md`.
+
+**Round 1 · HR final check (spec 03):** same receiver at `?node=hr_review_r1`. The node sends one `json_string` input (`workflow_input_5x656gas6`) holding all fields and the `requisition_id`. The app creates a "Review requisition" task for HR (the requisition stays With HR). HR edits the fields and picks **Approve** or **Return** (message required). The callback sends the reviewed JSON (same keys and formats as received), `Pass Status` (`true` / `false`) and the HR Response Message. On 200, Approve generates the job posting and sets the requisition Live; Return sets Returned to HM, round 2 (the HM task comes with the next webhook). See `specs/03-OpusIntegration-HRReviewR1.md`.
 
 To connect real Opus (`DATA_MODE=opus`):
 

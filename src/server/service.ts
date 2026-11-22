@@ -19,8 +19,8 @@ import { nowIso, rawDb, resetDb, simDelayMs } from "./store";
 import { runPostingStep, runPrecheckStep, startFlow1b, submitRequisition, tick } from "./flows";
 import { dataMode, sendCallback } from "./app/callbackSender";
 import { startCreateRequisitionCase } from "./app/createRequisitionCase";
-import { buildHmReviewOutput } from "./app/opusNodes";
-import { opusResubmitted } from "./flows";
+import { buildHmReviewOutput, buildHrReviewOutput } from "./app/opusNodes";
+import { opusHrDecided, opusResubmitted } from "./flows";
 import { RequisitionInputSchema } from "@/domain/schemas";
 
 export class ApiError extends Error {
@@ -285,22 +285,32 @@ const FIELD_LABELS: [keyof Requisition, string][] = [
 ];
 
 /**
- * HM resubmits a task that came from the real Opus webhook (spec 02 §7).
- * Body: { requisition: RequisitionInput, hm_note?: string }. The app builds the 14 bare outputs,
- * sends them to the callback API of the task's execution_id, and only on 200 saves the changes
- * and moves the requisition to With HR.
+ * Completes a task that came from the real Opus webhook. Only on 200 does the requisition change.
+ * - HM review (spec 02 §7). Body: { requisition, hm_note? }. 14 bare outputs; requisition → With HR.
+ * - HR final check (spec 03 §7). Body: { requisition, decision: "approve" | "return", hr_comments? }.
+ *   Reviewed JSON + pass flag + message; Approve → Live, Return → Returned to HM next round.
  */
 async function completeOpusTask(d: Db, t: TaskRecord, r: Requisition, body: Record<string, unknown>) {
-  if (t.task_type !== "HM_JD_REVISE") throw new ApiError(400, "unsupported", "This Opus task type is not supported yet.");
+  if (t.task_type !== "HM_JD_REVISE" && t.task_type !== "HR_JD_CHECK") throw new ApiError(400, "unsupported", "This Opus task type is not supported yet.");
   if (t.status === "closed") throw new ApiError(401, "task_closed", "This step is already closed in Opus. Another user completed it, or the Opus job was cancelled. Nothing was sent.");
   if (t.status === "done") throw new ApiError(409, "already_done", "This task was already submitted.");
+  const isHr = t.task_type === "HR_JD_CHECK";
+  // HR final check (spec 03 §7.3): decision first, then the comment, then the fields.
+  const decision = body.decision;
+  const comments = typeof body.hr_comments === "string" ? body.hr_comments.trim() : "";
+  if (isHr) {
+    if (decision !== "approve" && decision !== "return") throw new ApiError(400, "invalid", "Choose a decision", { field: "decision" });
+    if (decision === "return" && !comments) throw new ApiError(400, "comment_required", "Add a comment so the hiring manager knows what to change.", { field: "hr_comments" });
+  }
   const input = RequisitionInputSchema.parse(body.requisition);
   const note = typeof body.hm_note === "string" ? body.hm_note.trim() : "";
 
   // Build the requisition as it will be saved, without touching the stored one yet.
   const next: Requisition = structuredClone(r);
   applyInput(d, next, { ...input, copied_from: r.copied_from });
-  const output_data = buildHmReviewOutput(next);
+  const output_data: Record<string, unknown> = isHr
+    ? buildHrReviewOutput((t.inputs.source_json as Record<string, unknown> | undefined) ?? {}, next, decision === "approve", comments)
+    : buildHmReviewOutput(next);
 
   const declared = Object.keys(t.expected_output_schema ?? {});
   const undeclared = Object.keys(output_data).filter((k) => !declared.includes(k));
@@ -319,6 +329,17 @@ async function completeOpusTask(d: Db, t: TaskRecord, r: Requisition, body: Reco
 
   const changed = FIELD_LABELS.filter(([k]) => r[k] !== next[k]).map(([, label]) => label);
   const roundAtDecision = r.round;
+  if (isHr) {
+    const approve = decision === "approve";
+    opusHrDecided(r, next, t.assignee_name, approve, comments, changed);
+    const edited = !!r.reviews.find((x) => x.round === roundAtDecision)?.hr?.edited;
+    t.status = "done";
+    t.completed_at = nowIso();
+    t.outcome = approve ? "approve" : "return";
+    t.outcome_label = approve ? (edited ? "Approved with edits" : "Approved") : "Returned";
+    t.title = approve ? "Reviewed requisition · approved" : "Reviewed requisition · returned to HM";
+    return { task: toPublicTask(t), requisition: r };
+  }
   opusResubmitted(r, next, t.assignee_name, note, changed);
   t.status = "done";
   t.completed_at = nowIso();
