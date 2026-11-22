@@ -121,11 +121,30 @@ Keys inside `workflow_input_1n862ffg8` (`REQ_JSON_KEYS`, same as spec 03 §6.2):
 - Missing or unreadable fields fall back to the requisition, with a warning, as in spec 02. Values that don't match Settings go to `inputs.unmatched`, as in spec 02.
 - Keys the app doesn't know are kept in the stored JSON (§6.3) and sent back unchanged (§7.2).
 
-Real payload (REQ-2611-033, 2026-11-23, decoded; `value` arrives as an escaped JSON string):
+### 6.2a Real payload (reference)
+
+Captured from the webhook log for case REQ-2611-033 on 2026-11-23 (HM Review R1 → HR R1 Return → HM Review R2). These replace the IDs of the first sample (§13 #10). `execution_id`, `workflow_id` (`6576e72f-39e0-4e0d-b3e3-38f7ef1c931a`, "Valiram - Publish JD") and `callback` (`url` = `https://operator.opus.com/v1/execution/callback/<execution_id>`, `token_header` = `X-Opus-Callback-Token`) have the same shape as in spec 02.
+
+`inputs` as received:
 
 ```json
 {
-  "requisition_id": "REQ-2611-031",
+  "workflow_input_mffq3gx3y": {
+    "type": "str",
+    "value": "Test return for the HM Review Round 2 mapping. Please confirm staff get rest days each week."
+  },
+  "workflow_input_1n862ffg8": {
+    "type": "json_string",
+    "value": "{\"requisition_id\":\"REQ-2611-033\",\"department\":\"Retail Operations\",\"role\":\"Retail Sales Associate\",\"store\":\"Mid Valley Megamall\",\"region\":\"KL City\",\"employment_type\":\"Full time\",\"openings\":2,\"target_start_date\":\"04-01-2027\",\"base_salary_from\":1800,\"base_salary_to\":2300,\"about_the_role\":\"Join our store team as the first point of contact for shoppers, helping them find the right products and enjoy a smooth purchase. You will work closely with the Store Supervisor and your teammates to keep the shop floor welcoming, well stocked and sales-ready.\",\"what_you_will_do\":\"Greet customers, understand their needs and recommend suitable products\\nProcess sales, returns and exchanges accurately at the point-of-sale system\\nReplenish stock, maintain visual merchandising and keep displays neat and on-brand\\nWork towards individual and team sales targets\",\"what_we_look_for\":\"At least 1 year of retail or customer-facing experience\\nGood communication skills in English and Bahasa Malaysia\\nPositive, friendly and team-oriented attitude\",\"benefits\":\"EPF, SOCSO and EIS contributions\\nStaff discount on store products\\nAnnual leave and medical leave as per company policy\",\"shift_pattern\":\"Store open 12pm-7pm. Staff work 12pm-6pm, 6 hours a day, 7 days a week with no rest days.\"}"
+  }
+}
+```
+
+`workflow_input_1n862ffg8` decoded:
+
+```json
+{
+  "requisition_id": "REQ-2611-033",
   "department": "Retail Operations",
   "role": "Retail Sales Associate",
   "store": "Mid Valley Megamall",
@@ -135,11 +154,24 @@ Real payload (REQ-2611-033, 2026-11-23, decoded; `value` arrives as an escaped J
   "target_start_date": "04-01-2027",
   "base_salary_from": 1800,
   "base_salary_to": 2300,
-  "about_the_role": "Join our store team as the first point of contact for shoppers…",
-  "what_you_will_do": "Greet customers…\nProcess sales, returns and exchanges…\n…",
-  "what_we_look_for": "At least 1 year of retail or customer-facing experience…\n…",
-  "benefits": "EPF, SOCSO and EIS contributions\nStaff discount on store products\n…",
-  "shift_pattern": "Store open 10am-10pm. Rotating 8-hour shifts, 5 days a week, with 2 rest days each week."
+  "about_the_role": "Join our store team as the first point of contact for shoppers, helping them find the right products and enjoy a smooth purchase. You will work closely with the Store Supervisor and your teammates to keep the shop floor welcoming, well stocked and sales-ready.",
+  "what_you_will_do": "Greet customers, understand their needs and recommend suitable products\nProcess sales, returns and exchanges accurately at the point-of-sale system\nReplenish stock, maintain visual merchandising and keep displays neat and on-brand\nWork towards individual and team sales targets",
+  "what_we_look_for": "At least 1 year of retail or customer-facing experience\nGood communication skills in English and Bahasa Malaysia\nPositive, friendly and team-oriented attitude",
+  "benefits": "EPF, SOCSO and EIS contributions\nStaff discount on store products\nAnnual leave and medical leave as per company policy",
+  "shift_pattern": "Store open 12pm-7pm. Staff work 12pm-6pm, 6 hours a day, 7 days a week with no rest days."
+}
+```
+
+`expected_output_schema` as received (no `description` field, unlike the first sample):
+
+```json
+{
+  "workflow_output_0256au6te": {
+    "type": "json_string",
+    "display_name": "Updated Json",
+    "variable_name": "workflow_output_0256au6te",
+    "is_nullable": false
+  }
 }
 ```
 
@@ -187,7 +219,7 @@ Example:
 ```json
 {
   "output_data": {
-    "workflow_output_0256au6te": "{\"requisition_id\":\"REQ-2611-031\",\"department\":\"Retail Operations\",\"role\":\"Retail Sales Associate\",\"store\":\"Mid Valley Megamall\",\"region\":\"KL City\",\"employment_type\":\"Full time\",\"openings\":2,\"target_start_date\":\"04-01-2027\",\"base_salary_from\":1800,\"base_salary_to\":2300,\"about_the_role\":\"…\",\"what_you_will_do\":\"…\\n…\",\"what_we_look_for\":\"…\\n…\",\"benefits\":\"…\",\"shift_pattern\":\"Store open 10am-10pm. Rotating 8-hour shifts…\"}"
+    "workflow_output_0256au6te": "{\"requisition_id\":\"REQ-2611-033\",\"department\":\"Retail Operations\",\"role\":\"Retail Sales Associate\",\"store\":\"Mid Valley Megamall\",\"region\":\"KL City\",\"employment_type\":\"Full time\",\"openings\":2,\"target_start_date\":\"04-01-2027\",\"base_salary_from\":1800,\"base_salary_to\":2300,\"about_the_role\":\"…\",\"what_you_will_do\":\"…\\n…\",\"what_we_look_for\":\"…\\n…\",\"benefits\":\"…\",\"shift_pattern\":\"Store open 12pm-7pm. Staff work 12pm-6pm…\"}"
   },
   "status": "success"
 }
@@ -268,11 +300,13 @@ The alert title and subtitle come from `inputs.returned_by`: `"AI pre-check"` �
 
 ## 11. How to test
 
-1. **Locally, replayed payload:** set the env vars; take a requisition with an `opus_cases` entry that HR returned in round 1 (finish the spec 03 flow with **Return**, or edit a seeded one to `ReturnedToHm` round 2). Save the full webhook body (sample `inputs` + `execution_id`, `workflow_id`, `callback`, `expected_output_schema`) as `sample-hm-review-r2.json` with `requisition_id` set to that REQ, then:
-   `curl -X POST "http://localhost:3000/api/opus/webhook?node=hm_review_r2&secret=…" -H "content-type: application/json" --data @sample-hm-review-r2.json`
+1. **Replayed payload:** use the §6.2a body (`inputs` + `expected_output_schema`, plus `execution_id`, `workflow_id`, `workflow_name` and a `callback` block) as `sample-hm-review-r2.json`, with `requisition_id` set to a requisition that has an `opus_cases` entry and is `ReturnedToHm` round 2 (finish the spec 03 flow with **Return**). Then:
+   `curl -X POST "https://<preview>/api/opus/webhook?node=hm_review_r2&secret=…" -H "content-type: application/json" --data @sample-hm-review-r2.json`
    Check the HM task screen. The callback goes to Opus with a spent token, which tests the `401` path.
-2. **Live callback:** replay the body of a real run paused at this node (from the Opus case audit, `GET /api/opus/cases/{REQ}/audit`) with its real token, Resubmit, and check that Opus resumes to HR final check round 2.
-3. **End-to-end:** once Opus delivers to the Vercel URL (spec 02 blocker), run a full case: HM R1 → HR R1 Return → HM R2.
+2. **End-to-end (real run):** create a requisition whose JD fails the AI pre-check (e.g. a shift pattern that contradicts itself), so the run goes through Hiring Manager Review Round 1. Resubmit as the HM, **Return** as HR, and check that the Round 2 task arrives, then Resubmit and check that Opus resumes to HR final check round 2. Delivery to the Vercel URL works since 2026-11-23.
+   - A requisition that passes the pre-check currently fails in Opus at "HR Approval Round 1" (its input is wired from the skipped HM JSON Converter; seen on REQ-2611-032). Fix that in Builder, or use the failing-JD path above.
+   - The Opus case audit does not expose a paused node's payload or callback token; `GET /api/opus/webhook/log` (HR user) shows the received body with the token masked.
+   - Tasks can also be driven by API: `POST /api/tasks/{id}/complete` with `{"output_data": {"requisition": …}}` (HM, cookie `vh_user=jason`) or `{"output_data": {"requisition": …, "decision": "return", "hr_comments": "…"}}` (HR, `vh_user=siti`).
 
 ## 12. Acceptance criteria
 
