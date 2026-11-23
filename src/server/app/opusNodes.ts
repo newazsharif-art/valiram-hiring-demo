@@ -71,9 +71,8 @@ export const REQ_JSON_KEYS: Record<string, Field> = {
 /** Round 1 · HR final check outputs (spec 03 §7.1). */
 export const HR_REVIEW_OUTPUTS = {
   reviewed_json: "workflow_output_84zgk25bn",
-  pass_status: "b52a7030-aba8-4467-a433-e05c4633166c",
-  /** Second "Pass Status" output (bool, not nullable), added in Builder on 2026-11-23. Same value. */
-  pass_status_required: "725b0463-f2cb-4629-af87-635cffe5560d",
+  /** "Pass Status" (bool): true = Approve, false = Return. Replaced the two earlier Pass Status outputs. */
+  pass_status: "6bd09ad2-306d-4a2f-bc89-46e35d2650a2",
   message: "workflow_output_1ldrqy5bs",
 } as const;
 
@@ -382,7 +381,6 @@ export function buildHrReviewOutput(source: Record<string, unknown>, r: Requisit
   return {
     [HR_REVIEW_OUTPUTS.reviewed_json]: buildReviewedJson(source, r),
     [HR_REVIEW_OUTPUTS.pass_status]: approve,
-    [HR_REVIEW_OUTPUTS.pass_status_required]: approve,
     [HR_REVIEW_OUTPUTS.message]: message,
   };
 }

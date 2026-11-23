@@ -168,8 +168,7 @@ Sample (decoded):
 | Output ID (Opus) | Display name | Type | Value |
 | :--- | :--- | :--- | :--- |
 | `workflow_output_84zgk25bn` | Reviewed JD Json | `json_string` | `JSON.stringify` of the reviewed requisition in the **same keys and formats as the input** (§7.2). Real runs send `Full time` and `DD/MM/YYYY`; the first sample had `Full-time` and `DD-MM-YYYY` |
-| `b52a7030-aba8-4467-a433-e05c4633166c` | Pass Status | `bool` | `true` = Approve, `false` = Return to hiring manager |
-| `725b0463-f2cb-4629-af87-635cffe5560d` | Pass Status (second, **not nullable**) | `bool` | Same value as above. Added in Builder on 2026-11-23; without it the app refuses to send (`opus_schema_mismatch`) |
+| `6bd09ad2-306d-4a2f-bc89-46e35d2650a2` | Pass Status | `bool` | `true` = Approve, `false` = Return to hiring manager. Replaced the earlier `b52a7030-…` and `725b0463-…` outputs |
 | `workflow_output_1ldrqy5bs` | HR Response Message | `str` | HR's comment, trimmed. Required on Return; `""` when empty on Approve |
 
 Values are bare, as in spec 02. The `json_string` output is a **string** containing JSON, not an object.
@@ -180,7 +179,7 @@ Example (Return):
 {
   "output_data": {
     "workflow_output_84zgk25bn": "{\"department\":\"Retail Operations\",\"role\":\"Retail Sales Associate\",\"store\":\"Mid Valley Megamall\",\"region\":\"KL City\",\"employment_type\":\"Full-time\",\"openings\":2,\"target_start_date\":\"17-11-2026\",\"base_salary_from\":1800,\"base_salary_to\":2300,\"about_the_role\":\"…\",\"what_you_will_do\":\"…\\n…\",\"what_we_look_for\":\"…\\n…\",\"benefits\":\"…\",\"shift_pattern\":\"Store open 12pm-6pm…\",\"requisition_id\":\"REQ-2611-018\"}",
-    "b52a7030-aba8-4467-a433-e05c4633166c": false,
+    "6bd09ad2-306d-4a2f-bc89-46e35d2650a2": false,
     "workflow_output_1ldrqy5bs": "The shift pattern says the store opens 12pm-7pm but staff work 12pm-6pm. Please confirm who covers 6-7pm."
   },
   "status": "success"
@@ -301,7 +300,7 @@ For an `HR_JD_CHECK` task with `inputs.prefill` (Opus task), `/tasks/[id]` shows
 | 1 | `workflow_id` of the payload | The same "Valiram - Publish JD" workflow (`OPUS_CREATE_REQUISITION_WORKFLOW_ID`); the existing `wrong_workflow` check applies. |
 | 2 | What HR can do | Edit all fields, then Approve or Return (comment required to return). |
 | 3 | `workflow_output_1ldrqy5bs` has `variable_name` `workflow_output_1bxkc7tyo` | A Builder mistake; both become `workflow_output_1ldrqy5bs` (§4.1 step 3). The app sends `workflow_output_1ldrqy5bs`. |
-| 4 | `Pass Status` (`b52a7030-…`, `bool`) | Sent by the app: `true` = Approve, `false` = Return. The workflow branches on it. |
+| 4 | `Pass Status` (`6bd09ad2-306d-4a2f-bc89-46e35d2650a2`, `bool`) | Sent by the app: `true` = Approve, `false` = Return. The workflow branches on it. |
 | 5 | Format of the reviewed JSON | Same keys and formats as this node's input (`Full-time`, `DD-MM-YYYY`), unknown keys kept, as the output description asks. |
 | 6 | After Approve | The app generates the posting PDF and sets **Live** at once; no Opus posting node. |
 | 7 | After Return | **Returned to HM, round 2**, with no task until the HM Review Round 2 webhook (later spec). |
