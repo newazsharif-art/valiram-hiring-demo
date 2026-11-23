@@ -86,7 +86,7 @@ export const HR_REVIEW_R1_OUTPUTS: HrReviewOutputs = {
 /** HR Approval Round 2 outputs (spec 05 §7.1). */
 export const HR_REVIEW_R2_OUTPUTS: HrReviewOutputs = {
   reviewed_json: "workflow_output_pe8znczzs",
-  pass_status: "8b01d612-7abd-483c-9d33-733313c8bb6e",
+  pass_status: "538fe319-3380-4b25-a123-a82a914bdc65",
   message: "workflow_output_a6harg7au",
 };
 
