@@ -83,7 +83,7 @@ export const HR_REVIEW_R1_OUTPUTS: HrReviewOutputs = {
   message: "workflow_output_1ldrqy5bs",
 };
 
-/** HR Verification Round 2 outputs (spec 05 §7.1). */
+/** HR Approval Round 2 outputs (spec 05 §7.1). */
 export const HR_REVIEW_R2_OUTPUTS: HrReviewOutputs = {
   reviewed_json: "workflow_output_pe8znczzs",
   pass_status: "6710c073-3492-4833-b21e-dbbeaa48339f",
@@ -151,7 +151,7 @@ export const OPUS_NODES: Record<string, OpusNode> = {
     task_type: "HR_JD_CHECK",
     round: 2,
     node_id: "n_hr_verify_r2",
-    label: "HR Verification Round 2",
+    label: "HR Approval Round 2",
     json_input: "workflow_input_ualqh69xi",
     json_keys: REQ_JSON_KEYS,
     reply: "hr_decision",

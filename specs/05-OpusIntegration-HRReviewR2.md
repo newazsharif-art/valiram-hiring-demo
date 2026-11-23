@@ -1,4 +1,4 @@
-# 05 · Opus Integration · HR Review Round 2 (HR final check, Off-Platform webhook)
+# 05 · Opus Integration · HR Approval Round 2 (HR final check, Off-Platform webhook)
 
 | | |
 | :--- | :--- |
@@ -7,12 +7,12 @@
 | **Depends on** | [03 · HR Review Round 1](03-OpusIntegration-HRReviewR1.md) (HR screen, decision, reviewed JSON, Approve → Live, Return → next round), [04 · Hiring Manager Review Round 2](04-OpusIntegration-HMReviewR2.md) (HM resubmit → `WithHr` round 2, `OpusNode.reply`, `opusNodeById()`) |
 | **Branch** | `spec-05-hr-review-r2`, created from `main` (specs 02–04 are merged) |
 | **Scope** | Backend, Opus Builder setup, and a small change to the HR task screen (§8) |
-| **Opus node** | "HR Verification Round 2", an Off-Platform node in the workflow "Valiram - Publish JD" (`OPUS_CREATE_REQUISITION_WORKFLOW_ID`, confirmed). Renamed in Builder (§4.1 step 1) |
+| **Opus node** | "HR Approval Round 2", an Off-Platform node in the workflow "Valiram - Publish JD" (`OPUS_CREATE_REQUISITION_WORKFLOW_ID`, confirmed) |
 | **Opus docs** | [Off-Platform Review](https://developer.opus.com/tasks/off-platform-review), [Off-Platform Task](https://developer.opus.com/tasks/off-platform-task) |
 
 ## 1. Goal
 
-When the hiring manager resubmits at **Hiring Manager Review Round 2** (spec 04 §7.4), the Opus workflow pauses at **HR Verification Round 2** and POSTs the task to the app's webhook. The app:
+When the hiring manager resubmits at **Hiring Manager Review Round 2** (spec 04 §7.4), the Opus workflow pauses at **HR Approval Round 2** and POSTs the task to the app's webhook. The app:
 
 1. creates a round-2 **Review requisition** task (`HR_JD_CHECK`) for the HR recruiter;
 2. keeps the requisition **With HR, round 2** (`WithHr`), which spec 04 already set;
@@ -50,7 +50,7 @@ The receiver, secret check, payload schema, idempotency, callback sending, schem
 
 | # | Step | Detail |
 | :--- | :--- | :--- |
-| 0 | Node name | Rename the node to **HR Verification Round 2**. |
+| 0 | Node name | **HR Approval Round 2** (the name in Builder). |
 | 1 | Node input | `workflow_input_ualqh69xi` (`json_string`) with the keys in §6.2, `requisition_id` included. Already in the sample. |
 | 2 | Node outputs | The three outputs in §7.1, all nullable, as in the sample. |
 | 3 | Webhook URL | `https://<app-domain>/api/opus/webhook?node=hr_review_r2&secret=<OPUS_WEBHOOK_SECRET>`; on a preview URL also `&x-vercel-protection-bypass=<secret>` (spec 02 §4.1 steps 5–6a). Type a plain `&`, not `&amp;` (spec 04 §13 #10). |
@@ -71,7 +71,7 @@ hr_review_r2: {
   task_type: "HR_JD_CHECK",
   round: 2,
   node_id: "n_hr_verify_r2",          // same stage key as the simulator, so the stepper and node_map work
-  label: "HR Verification Round 2",
+  label: "HR Approval Round 2",
   json_input: "workflow_input_ualqh69xi",
   json_keys: REQ_JSON_KEYS,           // same keys as spec 03 §6.2
   reply: "hr_decision",
@@ -165,7 +165,7 @@ Decoded:
 
 ### 6.3 Task and requisition update
 
-**Task**: as spec 03 §6.3, with `round = 2` and `node_id = "n_hr_verify_r2"`. Assignee = the requisition's `hr_assignee` (the recruiter who returned it in round 1), else the first `HR_RECRUITER` in Settings. Title `Review requisition · <role>`. `inputs.prefill`, `inputs.unmatched`, `inputs.source_json`, `inputs.requisition_id`, `inputs.round = 2`, new `inputs.node_label = "HR Verification Round 2"` (the node's `label`, also set for round 1 from now on), `source = "opus"`. `execution_id` is appended to `db.opus_cases[id].execution_ids`.
+**Task**: as spec 03 §6.3, with `round = 2` and `node_id = "n_hr_verify_r2"`. Assignee = the requisition's `hr_assignee` (the recruiter who returned it in round 1), else the first `HR_RECRUITER` in Settings. Title `Review requisition · <role>`. `inputs.prefill`, `inputs.unmatched`, `inputs.source_json`, `inputs.requisition_id`, `inputs.round = 2`, new `inputs.node_label = "HR Approval Round 2"` (the node's `label`, also set for round 1 from now on), `source = "opus"`. `execution_id` is appended to `db.opus_cases[id].execution_ids`.
 
 **Requisition**: `opusHrReceived()` (spec 03) gets the round-2 case:
 
@@ -173,7 +173,7 @@ Decoded:
 - If already `WithHr` round 2 (normal path): no status change.
 - If `ReturnedToHm` round 2 (the app missed the HM's `200`, or the HM step was completed outside the app): review round 2 `hm = { by: <hm_name>, at: now }` if missing, status `WithHr`, `stage_times.WithHr = now`, activity "Opus moved the requisition to HR (round 2)."
 - `AiPrecheck` is handled only for round 1, as today.
-- Activity: "Opus paused at HR Verification Round 2; task T-… assigned to <HR>."
+- Activity: "Opus paused at HR Approval Round 2; task T-… assigned to <HR>."
 
 ## 7. Callback (HR sends a decision)
 
@@ -223,7 +223,7 @@ The Presenter **Advance** action keeps refusing Opus-driven requisitions (`409 o
 | | Round 1 (spec 03) | Round 2 (this spec) |
 | :--- | :--- | :--- |
 | Chip | "Round 1 of 3" | "Round 2 of 3" |
-| Waiting banner | "…paused at "Round 1 · HR final check"…" | "…paused at "HR Verification Round 2"…" (from `inputs.node_label`) |
+| Waiting banner | "…paused at "Round 1 · HR final check"…" | "…paused at "HR Approval Round 2"…" (from `inputs.node_label`) |
 | History card | "Round 1 history": AI pre-check, HM resubmit | **"Review history"**: one block per earlier round, oldest first. Round 1: AI pre-check (if any), HM resubmit, **HR's return comment** (who, when MYT). Round 2: HM resubmit (who, when MYT) |
 | Return option helper | "They revise; round 2 of 3 follows. Message required." | "They revise; round 3 of 3 follows, the last round. Message required." |
 | Return result alert | "Returned to <HM> (round 2 of 3 follows)." | "Returned to <HM> (round 3 of 3 follows, the last round)." |
@@ -275,7 +275,7 @@ Fields, decision radio, HR Response Message, the **Send decision to Opus** butto
 
 | # | Question | Decision |
 | :--- | :--- | :--- |
-| 1 | Node name | "HR Verification Round 2", in Builder and in the app (node label, activity, waiting banner). The stepper stage label is unchanged (Settings `node_map`). |
+| 1 | Node name | "HR Approval Round 2", in Builder and in the app (node label, activity, waiting banner). The stepper stage label is unchanged (Settings `node_map`). |
 | 2 | Sample source | The supplied sample (2026-11-23) has `REQ-2611-018` and the round-1 JD text, so it looks hand-built from spec 03's sample. Build from it now; when a real run reaches this node, check its payload in `/api/opus/webhook/log` and update the IDs, nullability and formats in this spec and `opusNodes.ts` if they differ, as done for spec 04. |
 | 3 | `workflow_id` of the payload | The same "Valiram - Publish JD" workflow (`OPUS_CREATE_REQUISITION_WORKFLOW_ID`); the existing `wrong_workflow` check applies. |
 | 4 | Output IDs | Per node (`OpusNode.outputs`), not one shared constant, because round 2 has its own IDs. |
