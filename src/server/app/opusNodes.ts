@@ -152,7 +152,7 @@ export const OPUS_NODES: Record<string, OpusNode> = {
     round: 2,
     node_id: "n_hr_verify_r2",
     label: "HR Approval Round 2",
-    json_input: "workflow_input_ualqh69xi",
+    json_input: "workflow_input_058aiutmp",
     json_keys: REQ_JSON_KEYS,
     reply: "hr_decision",
     outputs: HR_REVIEW_R2_OUTPUTS,

@@ -33,7 +33,7 @@ The node has the same shape as **Round 1 · HR final check**: one `json_string` 
 
 | | Spec 03 (HR final check R1) | This spec (HR final check R2) |
 | :--- | :--- | :--- |
-| JSON input | `workflow_input_5x656gas6` | `workflow_input_ualqh69xi` |
+| JSON input | `workflow_input_5x656gas6` | `workflow_input_058aiutmp` |
 | Reviewed JSON output | `workflow_output_84zgk25bn` | `workflow_output_pe8znczzs` |
 | Pass Status output | `6bd09ad2-306d-4a2f-bc89-46e35d2650a2` | `6710c073-3492-4833-b21e-dbbeaa48339f` |
 | HR Response Message output | `workflow_output_1ldrqy5bs` | `workflow_output_a6harg7au` |
@@ -51,10 +51,10 @@ The receiver, secret check, payload schema, idempotency, callback sending, schem
 | # | Step | Detail |
 | :--- | :--- | :--- |
 | 0 | Node name | **HR Approval Round 2** (the name in Builder). |
-| 1 | Node input | `workflow_input_ualqh69xi` (`json_string`) with the keys in §6.2, `requisition_id` included. Already in the sample. |
+| 1 | Node input | `workflow_input_058aiutmp` (`json_string`) with the keys in §6.2, `requisition_id` included. Already in the sample. |
 | 2 | Node outputs | The three outputs in §7.1, all nullable, as in the sample. |
 | 3 | Webhook URL | `https://<app-domain>/api/opus/webhook?node=hr_review_r2&secret=<OPUS_WEBHOOK_SECRET>`; on a preview URL also `&x-vercel-protection-bypass=<secret>` (spec 02 §4.1 steps 5–6a). Type a plain `&`, not `&amp;` (spec 04 §13 #10). |
-| 4 | Input wiring | `workflow_input_ualqh69xi` must come from the HM Review Round 2 output `workflow_output_0256au6te` (Updated Json), so HR sees the HM's round-2 edits. |
+| 4 | Input wiring | `workflow_input_058aiutmp` must come from the HM Review Round 2 output `workflow_output_0256au6te` (Updated Json), so HR sees the HM's round-2 edits. |
 | 5 | Timeout | Keep the 15 s default. |
 | 6 | Publish the workflow | Then replay or run one test case (§11). |
 
@@ -72,7 +72,7 @@ hr_review_r2: {
   round: 2,
   node_id: "n_hr_verify_r2",          // same stage key as the simulator, so the stepper and node_map work
   label: "HR Approval Round 2",
-  json_input: "workflow_input_ualqh69xi",
+  json_input: "workflow_input_058aiutmp",
   json_keys: REQ_JSON_KEYS,           // same keys as spec 03 §6.2
   reply: "hr_decision",
   outputs: HR_REVIEW_R2_OUTPUTS,      // §7.1
@@ -91,19 +91,21 @@ Same endpoint and steps as spec 03 §6.1, with these changes:
 
 | # | Step | Change |
 | :--- | :--- | :--- |
-| 6a | Parse `inputs.workflow_input_ualqh69xi.value` (JSON string; an object is also accepted). | Missing, not valid JSON, or not an object → `422 invalid_json_input`. |
+| 6a | Parse `inputs.workflow_input_058aiutmp.value` (JSON string; an object is also accepted). | Missing, not valid JSON, or not an object → `422 invalid_json_input`. |
 | 6 | `requisition_id` is read **from inside the JSON**. | Same `422 unknown_requisition` rule. |
 | 8 | Status guard: the requisition should be `WithHr` round 2 (HM resubmitted, spec 04 §7.4). Otherwise log a warning, still create the task, and bring the requisition to `WithHr` round 2 (§6.3). | Today the HR guard accepts `WithHr` or `AiPrecheck` for any HR node; `AiPrecheck` becomes round-1 only. |
 
 ### 6.2 JSON input mapping (webhook → app)
 
-Keys inside `workflow_input_ualqh69xi`: `REQ_JSON_KEYS`, exactly as spec 03 §6.2 (`requisition_id`, `department`, `role`, `store` → `store_id` by name, `region`, `employment_type`, `openings`, `target_start_date`, `base_salary_from`, `base_salary_to`, `about_the_role`, `what_you_will_do`, `what_we_look_for`, `benefits`, `shift_pattern`).
+Keys inside `workflow_input_058aiutmp`: `REQ_JSON_KEYS`, exactly as spec 03 §6.2 (`requisition_id`, `department`, `role`, `store` → `store_id` by name, `region`, `employment_type`, `openings`, `target_start_date`, `base_salary_from`, `base_salary_to`, `about_the_role`, `what_you_will_do`, `what_we_look_for`, `benefits`, `shift_pattern`).
 
 - `employment_type`: `Full-time` in the sample; `Full time` is also accepted (spec 04 saw it in a real run).
 - `target_start_date`: `DD-MM-YYYY` in the sample (`17-11-2026` → 17 Nov 2026); `DD/MM/YYYY` and `YYYY-MM-DD` also accepted.
 - Missing or unreadable fields fall back to the requisition with a warning; values that don't match Settings go to `inputs.unmatched`; unknown keys are kept in `source_json` and sent back unchanged.
 
 Sample `inputs` as supplied (2026-11-23):
+
+> The real run of 2026-11-23 (REQ-2611-038, case 83085) showed this node's input is **`workflow_input_058aiutmp`**. `workflow_input_ualqh69xi` in this sample is an input of HR Approval Round 1 (the normalized JSON, without `requisition_id`). The app reads `workflow_input_058aiutmp`.
 
 ```json
 {
@@ -276,7 +278,7 @@ Fields, decision radio, HR Response Message, the **Send decision to Opus** butto
 | # | Question | Decision |
 | :--- | :--- | :--- |
 | 1 | Node name | "HR Approval Round 2", in Builder and in the app (node label, activity, waiting banner). The stepper stage label is unchanged (Settings `node_map`). |
-| 2 | Sample source | The supplied sample (2026-11-23) has `REQ-2611-018` and the round-1 JD text, so it looks hand-built from spec 03's sample. Build from it now; when a real run reaches this node, check its payload in `/api/opus/webhook/log` and update the IDs, nullability and formats in this spec and `opusNodes.ts` if they differ, as done for spec 04. |
+| 2 | Sample source | The supplied sample (2026-11-23) was hand-built. The Opus audit of real case REQ-2611-038 (83085) on 2026-11-23 gave the real input `workflow_input_058aiutmp` (json_string, `requisition_id` included); the three output IDs matched. The webhook body itself is still to be checked in `/api/opus/webhook/log` on the first delivered run. |
 | 3 | `workflow_id` of the payload | The same "Valiram - Publish JD" workflow (`OPUS_CREATE_REQUISITION_WORKFLOW_ID`); the existing `wrong_workflow` check applies. |
 | 4 | Output IDs | Per node (`OpusNode.outputs`), not one shared constant, because round 2 has its own IDs. |
 | 5 | Pass Status | `true` = Approve, `false` = Return, as spec 03. The workflow branches on it. |
