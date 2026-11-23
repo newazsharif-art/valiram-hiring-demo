@@ -35,7 +35,7 @@ The node has the same shape as **Round 1 · HR final check**: one `json_string` 
 | :--- | :--- | :--- |
 | JSON input | `workflow_input_5x656gas6` | `workflow_input_058aiutmp` |
 | Reviewed JSON output | `workflow_output_84zgk25bn` | `workflow_output_pe8znczzs` |
-| Pass Status output | `6bd09ad2-306d-4a2f-bc89-46e35d2650a2` | `6710c073-3492-4833-b21e-dbbeaa48339f` |
+| Pass Status output | `6bd09ad2-306d-4a2f-bc89-46e35d2650a2` | `8b01d612-7abd-483c-9d33-733313c8bb6e` |
 | HR Response Message output | `workflow_output_1ldrqy5bs` | `workflow_output_a6harg7au` |
 | Comes after | AI pre-check passed, or HM Review R1 | HM Review R2 |
 | Status on receipt | `WithHr` r1 or `AiPrecheck` r1 | `WithHr` r2 |
@@ -165,6 +165,8 @@ Decoded:
 }
 ```
 
+> Pass Status was replaced in Builder on 2026-11-23 by **`8b01d612-7abd-483c-9d33-733313c8bb6e`** (`bool`). The app sends the new ID; `6710c073-…` above is the old one.
+
 ### 6.3 Task and requisition update
 
 **Task**: as spec 03 §6.3, with `round = 2` and `node_id = "n_hr_verify_r2"`. Assignee = the requisition's `hr_assignee` (the recruiter who returned it in round 1), else the first `HR_RECRUITER` in Settings. Title `Review requisition · <role>`. `inputs.prefill`, `inputs.unmatched`, `inputs.source_json`, `inputs.requisition_id`, `inputs.round = 2`, new `inputs.node_label = "HR Approval Round 2"` (the node's `label`, also set for round 1 from now on), `source = "opus"`. `execution_id` is appended to `db.opus_cases[id].execution_ids`.
@@ -186,7 +188,7 @@ Decoded:
 | Output ID (Opus) | Display name | Type | Value |
 | :--- | :--- | :--- | :--- |
 | `workflow_output_pe8znczzs` | Reviewed JD Json | `json_string` | `buildReviewedJson(source_json, next)`: same keys and formats as the input (spec 03 §7.2), unknown keys kept |
-| `6710c073-3492-4833-b21e-dbbeaa48339f` | Pass Status | `bool` | `true` = Approve, `false` = Return to hiring manager |
+| `8b01d612-7abd-483c-9d33-733313c8bb6e` | Pass Status | `bool` | `true` = Approve, `false` = Return to hiring manager |
 | `workflow_output_a6harg7au` | HR Response Message | `str` | HR's comment, trimmed. Required on Return; `""` when empty on Approve |
 
 Values are bare. The `json_string` output is a **string** containing JSON. All three are nullable, but the app always sends all three.
@@ -197,7 +199,7 @@ Example (Return):
 {
   "output_data": {
     "workflow_output_pe8znczzs": "{\"department\":\"Retail Operations\",\"role\":\"Retail Sales Associate\",\"store\":\"Mid Valley Megamall\",\"region\":\"KL City\",\"employment_type\":\"Full-time\",\"openings\":2,\"target_start_date\":\"17-11-2026\",\"base_salary_from\":1800,\"base_salary_to\":2300,\"about_the_role\":\"…\",\"what_you_will_do\":\"…\\n…\",\"what_we_look_for\":\"…\\n…\",\"benefits\":\"…\",\"shift_pattern\":\"Store open 12pm-7pm…\",\"requisition_id\":\"REQ-2611-018\"}",
-    "6710c073-3492-4833-b21e-dbbeaa48339f": false,
+    "8b01d612-7abd-483c-9d33-733313c8bb6e": false,
     "workflow_output_a6harg7au": "The shift pattern still has a typo (\"12pm-7pm..\") and \"Staff will awarded\". Please fix the wording; this is the last review round."
   },
   "status": "success"
@@ -265,7 +267,7 @@ Fields, decision radio, HR Response Message, the **Send decision to Opus** butto
 3. A requisition in `ReturnedToHm` round 2 when the webhook arrives still gets the task, moves to **With HR, round 2**, and a warning is logged.
 4. An input that isn't valid JSON, or has no known `requisition_id` → `422`, nothing created. Secret, node, body and workflow checks behave as in spec 02.
 5. The same payload sent twice creates one task.
-6. **Approve**: Opus receives exactly `workflow_output_pe8znczzs`, `6710c073-3492-4833-b21e-dbbeaa48339f` (`true`) and `workflow_output_a6harg7au`; without edits the JSON has the same values and formats as received. After `200` the requisition is **Live** with a job posting PDF; history shows round 2 "Approved" / "Approved with edits".
+6. **Approve**: Opus receives exactly `workflow_output_pe8znczzs`, `8b01d612-7abd-483c-9d33-733313c8bb6e` (`true`) and `workflow_output_a6harg7au`; without edits the JSON has the same values and formats as received. After `200` the requisition is **Live** with a job posting PDF; history shows round 2 "Approved" / "Approved with edits".
 7. **Return** without a comment shows a field error and calls nothing. With a comment: Pass Status `false`, message = the comment; after `200` the requisition is **Returned to HM, round 3**, with no new task.
 8. If the callback fails (network error, `422`, timeout), the requisition stays **With HR, round 2** and the task stays open; a spent token closes the task with the existing message.
 9. Round-1 HR tasks still send the spec 03 output IDs (`workflow_output_84zgk25bn`, `6bd09ad2-…`, `workflow_output_1ldrqy5bs`).
