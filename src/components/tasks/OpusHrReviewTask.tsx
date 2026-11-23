@@ -1,7 +1,7 @@
 "use client";
 /**
- * "Review requisition" for an HR final check task delivered by the real Opus webhook (spec 03 §8):
- * the round history (read only), the requisition form prefilled from Opus, and the decision.
+ * "Review requisition" for an HR final check task delivered by the real Opus webhook (spec 03 §8, spec 05 §8):
+ * the review history of this and earlier rounds (read only), the requisition form prefilled from Opus, and the decision.
  * Send decision posts the reviewed JSON, the pass flag and the HR message to the Opus callback API.
  */
 import Link from "next/link";
@@ -35,7 +35,12 @@ export function OpusHrReviewTask({ task, requisition: r, onChanged }: { task: Ta
   const prefill = task.inputs.prefill as RequisitionInput | undefined;
   const unmatched = (task.inputs.unmatched as Unmatched | undefined) ?? {};
   const round = task.round ?? r.round;
-  const review = r.reviews.find((x) => x.round === round);
+  // This round and every earlier one, oldest first (spec 05 §8).
+  const history = r.reviews
+    .filter((x) => x.round <= round && (x.precheck || x.hm || (x.round < round && x.hr)))
+    .sort((a, b) => a.round - b.round);
+  const nodeLabel = typeof task.inputs.node_label === "string" && task.inputs.node_label ? task.inputs.node_label : `Round ${round} · HR final check`;
+  const nextRound = round + 1 >= 3 ? `round ${round + 1} of 3 follows, the last round` : `round ${round + 1} of 3 follows`;
   const [form, setForm] = useState<RequisitionForm>(prefill ? formFromInput(prefill) : formFromRequisition(r));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [decision, setDecision] = useState<Decision>("");
@@ -84,7 +89,7 @@ export function OpusHrReviewTask({ task, requisition: r, onChanged }: { task: Ta
 
       {open && (
         <WaitingBanner>
-          <b>Opus is waiting on this step.</b> The workflow is paused at &quot;Round {round} · HR final check&quot;. Waiting {waitingFor(task.created_at)}. Your decision is sent back once and the
+          <b>Opus is waiting on this step.</b> The workflow is paused at &quot;{nodeLabel}&quot;. Waiting {waitingFor(task.created_at)}. Your decision is sent back once and the
           workflow continues straight away.
         </WaitingBanner>
       )}
@@ -97,33 +102,44 @@ export function OpusHrReviewTask({ task, requisition: r, onChanged }: { task: Ta
       )}
       {result === "return" && (
         <Alert severity="warning" role="status">
-          <AlertTitle sx={{ fontWeight: 500 }}>Returned to {r.hm_name} (round {round + 1} of 3 follows).</AlertTitle>
+          <AlertTitle sx={{ fontWeight: 500 }}>Returned to {r.hm_name} ({nextRound}).</AlertTitle>
           Sent to Opus with your message. The hiring manager gets a task when Opus reaches the next review step. <NextLink href="/tasks">Next task</NextLink>
         </Alert>
       )}
       {state.kind === "closed" && <ClosedBanner reqId={r.id} />}
 
-      {review && (review.precheck || review.hm) && (
-        <SectionCard title={`Round ${round} history`}>
-          <CardContent sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-            {review.precheck && (
-              <Box>
-                <Typography sx={{ fontWeight: 500, mb: 0.5 }}>
-                  AI pre-check · {review.precheck.pass ? "passed" : "needed changes"} ({formatMyt(review.precheck.at, "full")})
-                </Typography>
-                {review.precheck.findings.length > 0 && (
-                  <Box sx={{ whiteSpace: "pre-line" }}>
-                    <FindingList findings={review.precheck.findings} />
+      {history.length > 0 && (
+        <SectionCard title={round > 1 ? "Review history" : `Round ${round} history`}>
+          <CardContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {history.map((review) => (
+              <Box key={review.round} sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                {round > 1 && <Typography sx={{ fontWeight: 600, fontSize: 14 }}>Round {review.round}</Typography>}
+                {review.precheck && (
+                  <Box>
+                    <Typography sx={{ fontWeight: 500, mb: 0.5 }}>
+                      AI pre-check · {review.precheck.pass ? "passed" : "needed changes"} ({formatMyt(review.precheck.at, "full")})
+                    </Typography>
+                    {review.precheck.findings.length > 0 && (
+                      <Box sx={{ whiteSpace: "pre-line" }}>
+                        <FindingList findings={review.precheck.findings} />
+                      </Box>
+                    )}
                   </Box>
                 )}
+                {review.hm && (
+                  <Typography sx={{ fontSize: 14 }}>
+                    <b>{review.hm.by}</b> resubmitted on {formatMyt(review.hm.at, "full")}
+                    {review.hm.note ? `: "${review.hm.note}"` : "."}
+                  </Typography>
+                )}
+                {review.round < round && review.hr && (
+                  <Typography sx={{ fontSize: 14, whiteSpace: "pre-line" }}>
+                    <b>{review.hr.by}</b> {review.hr.decision === "approve" ? "approved" : "returned it"} on {formatMyt(review.hr.at, "full")}
+                    {review.hr.comments ? `: "${review.hr.comments}"` : "."}
+                  </Typography>
+                )}
               </Box>
-            )}
-            {review.hm && (
-              <Typography sx={{ fontSize: 14 }}>
-                <b>{review.hm.by}</b> resubmitted on {formatMyt(review.hm.at, "full")}
-                {review.hm.note ? `: "${review.hm.note}"` : "."}
-              </Typography>
-            )}
+            ))}
           </CardContent>
         </SectionCard>
       )}
@@ -152,7 +168,7 @@ export function OpusHrReviewTask({ task, requisition: r, onChanged }: { task: Ta
             >
               {[
                 { v: "approve", t: "Approve and publish", d: "Generate the job posting and mark the JD live.", c: "success.main" },
-                { v: "return", t: "Return to hiring manager", d: `They revise; round ${round + 1} of 3 follows. Message required.`, c: "error.main" },
+                { v: "return", t: "Return to hiring manager", d: `They revise; ${nextRound}. Message required.`, c: "error.main" },
               ].map((o) => (
                 <FormControlLabel
                   key={o.v}

@@ -69,7 +69,7 @@ API (all JSON unless noted; the current user comes from the `vh_user` cookie):
 | `GET /api/demo/state` · `POST /api/demo/{reset\|precheck\|close-screening\|advance}` | Presenter actions |
 | `POST /api/opus-sim/callback/{executionId}` | Simulated Opus callback endpoint (header `X-Opus-Callback-Token`) |
 | `GET /api/opus-sim/jobs/{id}/audit` | Simulated `GET /job/{id}/audit` (no timestamps, like the real one) |
-| `POST /api/opus/webhook?node=hm_review_r1` / `?node=hr_review_r1` / `?node=hm_review_r2` | Real Opus Off-Platform webhook (spec 02, 03, 04). Header `X-Valiram-Webhook-Secret` (or `&secret=` if Opus can't send headers). 503 when the integration is off |
+| `POST /api/opus/webhook?node=hm_review_r1` / `?node=hr_review_r1` / `?node=hm_review_r2` / `?node=hr_review_r2` | Real Opus Off-Platform webhook (spec 02, 03, 04, 05). Header `X-Valiram-Webhook-Secret` (or `&secret=` if Opus can't send headers). 503 when the integration is off |
 
 ## How the simulator behaves
 
@@ -155,6 +155,8 @@ src/app/api/...    route handlers
 **Round 1 · HR final check (spec 03):** same receiver at `?node=hr_review_r1`. The node sends one `json_string` input (`workflow_input_5x656gas6`) holding all fields and the `requisition_id`. The app creates a "Review requisition" task for HR (the requisition stays With HR). HR edits the fields and picks **Approve** or **Return** (message required). The callback sends the reviewed JSON (same keys and formats as received), `Pass Status` (`true` / `false`) and the HR Response Message. On 200, Approve generates the job posting and sets the requisition Live; Return sets Returned to HM, round 2 (the HM task comes with the next webhook). See `specs/03-OpusIntegration-HRReviewR1.md`.
 
 **Hiring Manager Review Round 2 (spec 04):** same receiver at `?node=hm_review_r2`. Opus calls it after HR returns the requisition in round 1. The node sends the HR Response Message (`workflow_input_mffq3gx3y`) and one `json_string` input (`workflow_input_1n862ffg8`) with all fields and the `requisition_id`. The app creates a round-2 "Revise requisition" task for the hiring manager, showing HR's message read only and the fields prefilled (HR's edits included). On **Resubmit** the callback sends one output, `workflow_output_0256au6te` (not nullable): the same JSON with the hiring manager's values, in the keys and formats Opus sent. On 200 the requisition is With HR, round 2. See `specs/04-OpusIntegration-HMReviewR2.md`.
+
+**HR Verification Round 2 (spec 05):** same receiver at `?node=hr_review_r2`. Opus calls it after the hiring manager resubmits in round 2. Same shape as the round-1 HR final check: one `json_string` input (`workflow_input_ualqh69xi`) and three outputs with their own IDs: Reviewed JD Json `workflow_output_pe8znczzs`, Pass Status `6710c073-3492-4833-b21e-dbbeaa48339f`, HR Response Message `workflow_output_a6harg7au`. The HR screen shows the review history of rounds 1 and 2. On 200, Approve generates the job posting and sets the requisition Live; Return sets Returned to HM, round 3 (the last round; its HM task comes with a later webhook). See `specs/05-OpusIntegration-HRReviewR2.md`.
 
 To connect real Opus (`DATA_MODE=opus`):
 

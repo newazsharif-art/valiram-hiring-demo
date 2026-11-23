@@ -1,5 +1,5 @@
 /**
- * Real Opus Off-Platform nodes the app handles (spec 02, spec 03, spec 04).
+ * Real Opus Off-Platform nodes the app handles (spec 02, spec 03, spec 04, spec 05).
  * Opus doesn't say which node sent a webhook, so each node has its own webhook URL:
  *   POST /api/opus/webhook?node=<key>
  * Input and output IDs live here, so a Builder change only touches this file.
@@ -68,13 +68,27 @@ export const REQ_JSON_KEYS: Record<string, Field> = {
   shift_pattern: "shift_pattern",
 };
 
+/** Output IDs of an HR final check node: reviewed JSON, Pass Status, HR message. */
+export interface HrReviewOutputs {
+  reviewed_json: string;
+  pass_status: string;
+  message: string;
+}
+
 /** Round 1 · HR final check outputs (spec 03 §7.1). */
-export const HR_REVIEW_OUTPUTS = {
+export const HR_REVIEW_R1_OUTPUTS: HrReviewOutputs = {
   reviewed_json: "workflow_output_84zgk25bn",
   /** "Pass Status" (bool): true = Approve, false = Return. Replaced the two earlier Pass Status outputs. */
   pass_status: "6bd09ad2-306d-4a2f-bc89-46e35d2650a2",
   message: "workflow_output_1ldrqy5bs",
-} as const;
+};
+
+/** HR Verification Round 2 outputs (spec 05 §7.1). */
+export const HR_REVIEW_R2_OUTPUTS: HrReviewOutputs = {
+  reviewed_json: "workflow_output_pe8znczzs",
+  pass_status: "6710c073-3492-4833-b21e-dbbeaa48339f",
+  message: "workflow_output_a6harg7au",
+};
 
 /** Hiring Manager Review Round 2 output "Updated Json" (json_string, not nullable; spec 04 §7.1). */
 export const HM_REVIEW_R2_OUTPUT = "workflow_output_0256au6te";
@@ -100,6 +114,8 @@ export interface OpusNode {
   json_input?: string;
   json_keys?: Record<string, Field>;
   reply: OpusReply;
+  /** Output IDs for `reply: "hr_decision"` nodes (each HR round has its own). */
+  outputs?: HrReviewOutputs;
 }
 
 export const OPUS_NODES: Record<string, OpusNode> = {
@@ -119,6 +135,7 @@ export const OPUS_NODES: Record<string, OpusNode> = {
     json_input: "workflow_input_5x656gas6",
     json_keys: REQ_JSON_KEYS,
     reply: "hr_decision",
+    outputs: HR_REVIEW_R1_OUTPUTS,
   },
   hm_review_r2: {
     task_type: "HM_JD_REVISE",
@@ -129,6 +146,16 @@ export const OPUS_NODES: Record<string, OpusNode> = {
     json_input: "workflow_input_1n862ffg8",
     json_keys: REQ_JSON_KEYS,
     reply: "json",
+  },
+  hr_review_r2: {
+    task_type: "HR_JD_CHECK",
+    round: 2,
+    node_id: "n_hr_verify_r2",
+    label: "HR Verification Round 2",
+    json_input: "workflow_input_ualqh69xi",
+    json_keys: REQ_JSON_KEYS,
+    reply: "hr_decision",
+    outputs: HR_REVIEW_R2_OUTPUTS,
   },
 };
 
@@ -376,11 +403,17 @@ export function buildHmUpdatedJsonOutput(source: Record<string, unknown>, r: Req
   return { [HM_REVIEW_R2_OUTPUT]: buildReviewedJson(source, r) };
 }
 
-/** The HR final check outputs (spec 03 §7.1). Bare values. */
-export function buildHrReviewOutput(source: Record<string, unknown>, r: Requisition, approve: boolean, message: string): Record<string, string | boolean> {
+/** The HR final check outputs (spec 03 §7.1, spec 05 §7.1), with the node's own output IDs. Bare values. */
+export function buildHrReviewOutput(
+  outputs: HrReviewOutputs,
+  source: Record<string, unknown>,
+  r: Requisition,
+  approve: boolean,
+  message: string,
+): Record<string, string | boolean> {
   return {
-    [HR_REVIEW_OUTPUTS.reviewed_json]: buildReviewedJson(source, r),
-    [HR_REVIEW_OUTPUTS.pass_status]: approve,
-    [HR_REVIEW_OUTPUTS.message]: message,
+    [outputs.reviewed_json]: buildReviewedJson(source, r),
+    [outputs.pass_status]: approve,
+    [outputs.message]: message,
   };
 }

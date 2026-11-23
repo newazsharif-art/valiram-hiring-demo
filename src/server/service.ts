@@ -289,7 +289,7 @@ const FIELD_LABELS: [keyof Requisition, string][] = [
  * - HM review round 1 (spec 02 §7). Body: { requisition }. 15 bare outputs; requisition → With HR.
  * - HM review round 2 (spec 04 §7). Body: { requisition }. One output: the requisition JSON as received,
  *   with the HM's values; requisition → With HR (same round).
- * - HR final check (spec 03 §7). Body: { requisition, decision: "approve" | "return", hr_comments? }.
+ * - HR final check, rounds 1 and 2 (spec 03 §7, spec 05 §7). Body: { requisition, decision: "approve" | "return", hr_comments? }.
  *   Reviewed JSON + pass flag + message; Approve → Live, Return → Returned to HM next round.
  */
 async function completeOpusTask(d: Db, t: TaskRecord, r: Requisition, body: Record<string, unknown>) {
@@ -310,11 +310,16 @@ async function completeOpusTask(d: Db, t: TaskRecord, r: Requisition, body: Reco
   const next: Requisition = structuredClone(r);
   applyInput(d, next, { ...input, copied_from: r.copied_from });
   // The reply shape belongs to the node, not the task type: two HM_JD_REVISE nodes reply differently (spec 04 §5).
-  const reply = opusNodeById(t.node_id)?.reply ?? (isHr ? "hr_decision" : "fields");
+  const node = opusNodeById(t.node_id);
+  const reply = node?.reply ?? (isHr ? "hr_decision" : "fields");
+  if (reply === "hr_decision" && !node?.outputs) {
+    console.error(`[opus] callback task=${t.id}: node ${t.node_id} has no output IDs configured.`);
+    throw new ApiError(500, "opus_schema_mismatch", "The Opus step isn't set up in the app, so nothing was sent. Please contact your system administrator.");
+  }
   const source = (t.inputs.source_json as Record<string, unknown> | undefined) ?? {};
   const output_data: Record<string, unknown> =
     reply === "hr_decision"
-      ? buildHrReviewOutput(source, next, decision === "approve", comments)
+      ? buildHrReviewOutput(node!.outputs!, source, next, decision === "approve", comments)
       : reply === "json"
         ? buildHmUpdatedJsonOutput(source, next)
         : buildHmReviewOutput(next);

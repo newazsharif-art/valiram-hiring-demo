@@ -211,11 +211,19 @@ function copyFields(r: Requisition, next: Requisition) {
 }
 
 /**
- * The real Opus run paused at an HR final check node (spec 03 §6.3). Fields are not changed.
- * Arriving straight from AiPrecheck means the pre-check passed with no HM review.
+ * The real Opus run paused at an HR final check node (spec 03 §6.3, spec 05 §6.3). Fields are not changed.
+ * Round 1 arriving straight from AiPrecheck means the pre-check passed with no HM review. A later round
+ * arriving while still ReturnedToHm means the app missed the HM's 200: Opus is the source of truth.
  */
 export function opusHrReceived(r: Requisition, round: number, taskId: string, hrName: string, nodeLabel: string) {
-  if (r.status === "AiPrecheck") {
+  if (round > 1 && r.status === "ReturnedToHm" && r.round === round) {
+    const rv = r.reviews.find((x) => x.round === round) ?? (r.reviews.push({ round, outcome: "pending" }), r.reviews[r.reviews.length - 1]);
+    rv.hm ??= { by: r.hm_name, at: nowIso() };
+    r.status = "WithHr";
+    mark(r, "WithHr");
+    log(r, `Opus moved the requisition to HR (round ${round}).`);
+  }
+  if (round === 1 && r.status === "AiPrecheck") {
     const rv = r.reviews.find((x) => x.round === round) ?? (r.reviews.push({ round, outcome: "pending" }), r.reviews[r.reviews.length - 1]);
     rv.precheck = { pass: true, at: nowIso(), findings: [] };
     r.status = "WithHr";

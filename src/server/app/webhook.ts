@@ -90,8 +90,9 @@ export function receiveOpusTask(db: Db, nodeKey: string, p: OpusOffPlatformPaylo
   if (!p.callback.url.replace(/\/+$/, "").endsWith(`/callback/${p.execution_id}`)) {
     console.warn(`${tag} requisition_id=${req.id}: callback.url does not end with /callback/<execution_id>; using it as sent.`);
   }
-  // Expected status per node (spec 02 §6.2, spec 03 §6.1, spec 04 §6.1 step 8).
-  const expected = node.task_type === "HR_JD_CHECK" ? ["WithHr", "AiPrecheck"] : node.round === 1 ? ["AiPrecheck"] : ["ReturnedToHm"];
+  // Expected status per node (spec 02 §6.2, spec 03 §6.1, spec 04 §6.1 step 8, spec 05 §6.1 step 8).
+  const expected =
+    node.task_type === "HR_JD_CHECK" ? (node.round === 1 ? ["WithHr", "AiPrecheck"] : ["WithHr"]) : node.round === 1 ? ["AiPrecheck"] : ["ReturnedToHm"];
   if (!expected.includes(req.status) || req.round !== node.round) {
     console.warn(`${tag} requisition_id=${req.id}: requisition is ${req.status} round ${req.round}, expected ${expected.join(" or ")} round ${node.round}. Creating the task anyway.`);
   }
@@ -127,7 +128,7 @@ export function receiveOpusTask(db: Db, nodeKey: string, p: OpusOffPlatformPaylo
     created_at: nowIso(),
     reminders: [],
     inputs: isHr
-      ? { task_type: node.task_type, requisition_id: req.id, round: node.round, prefill, unmatched, source_json: read.json ?? {} }
+      ? { task_type: node.task_type, requisition_id: req.id, round: node.round, node_label: node.label, prefill, unmatched, source_json: read.json ?? {} }
       : {
           task_type: node.task_type,
           requisition_id: req.id,
