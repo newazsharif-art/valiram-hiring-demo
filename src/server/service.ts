@@ -312,7 +312,7 @@ async function completeOpusTask(d: Db, t: TaskRecord, r: Requisition, body: Reco
   // The reply shape belongs to the node, not the task type: two HM_JD_REVISE nodes reply differently (spec 04 §5).
   const node = opusNodeById(t.node_id);
   const reply = node?.reply ?? (isHr ? "hr_decision" : "fields");
-  if (reply === "hr_decision" && !node?.outputs) {
+  if ((reply === "hr_decision" && !node?.outputs) || (reply === "json" && !node?.json_output)) {
     console.error(`[opus] callback task=${t.id}: node ${t.node_id} has no output IDs configured.`);
     throw new ApiError(500, "opus_schema_mismatch", "The Opus step isn't set up in the app, so nothing was sent. Please contact your system administrator.");
   }
@@ -321,7 +321,7 @@ async function completeOpusTask(d: Db, t: TaskRecord, r: Requisition, body: Reco
     reply === "hr_decision"
       ? buildHrReviewOutput(node!.outputs!, source, next, decision === "approve", comments)
       : reply === "json"
-        ? buildHmUpdatedJsonOutput(source, next)
+        ? buildHmUpdatedJsonOutput(node!.json_output!, source, next)
         : buildHmReviewOutput(next);
 
   const declared = Object.keys(t.expected_output_schema ?? {});

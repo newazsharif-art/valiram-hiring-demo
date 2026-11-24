@@ -2,7 +2,7 @@
 /**
  * "Revise requisition" for a task delivered by the real Opus webhook (spec 02 §8, spec 04 §8):
  * the Message to Hiring Manager (round 1, from the AI pre-check) or the HR Response Message
- * (round 2, from HR), read only, and the New requisition form, prefilled from Opus.
+ * (rounds 2 and 3, from HR), read only, and the New requisition form, prefilled from Opus.
  * Resubmit sends the fields to the Opus callback API; on success the requisition is With HR.
  */
 import Link from "next/link";

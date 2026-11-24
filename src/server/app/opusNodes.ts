@@ -1,5 +1,5 @@
 /**
- * Real Opus Off-Platform nodes the app handles (spec 02, spec 03, spec 04, spec 05).
+ * Real Opus Off-Platform nodes the app handles (spec 02, spec 03, spec 04, spec 05, spec 06).
  * Opus doesn't say which node sent a webhook, so each node has its own webhook URL:
  *   POST /api/opus/webhook?node=<key>
  * Input and output IDs live here, so a Builder change only touches this file.
@@ -93,6 +93,9 @@ export const HR_REVIEW_R2_OUTPUTS: HrReviewOutputs = {
 /** Hiring Manager Review Round 2 output "Updated Json" (json_string, not nullable; spec 04 §7.1). */
 export const HM_REVIEW_R2_OUTPUT = "workflow_output_0256au6te";
 
+/** Hiring Manager Review Round 3 output "Updated JSON" (json_string, nullable; spec 06 §7.1). */
+export const HM_REVIEW_R3_OUTPUT = "workflow_output_a78p5ndvb";
+
 /** How the app replies on the callback. */
 export type OpusReply =
   /** 14 flat values + Requisition Id (spec 02). */
@@ -116,6 +119,8 @@ export interface OpusNode {
   reply: OpusReply;
   /** Output IDs for `reply: "hr_decision"` nodes (each HR round has its own). */
   outputs?: HrReviewOutputs;
+  /** Output ID for `reply: "json"` nodes (each HM round has its own; spec 06 §5). */
+  json_output?: string;
 }
 
 export const OPUS_NODES: Record<string, OpusNode> = {
@@ -146,6 +151,7 @@ export const OPUS_NODES: Record<string, OpusNode> = {
     json_input: "workflow_input_1n862ffg8",
     json_keys: REQ_JSON_KEYS,
     reply: "json",
+    json_output: HM_REVIEW_R2_OUTPUT,
   },
   hr_review_r2: {
     task_type: "HR_JD_CHECK",
@@ -156,6 +162,17 @@ export const OPUS_NODES: Record<string, OpusNode> = {
     json_keys: REQ_JSON_KEYS,
     reply: "hr_decision",
     outputs: HR_REVIEW_R2_OUTPUTS,
+  },
+  hm_review_r3: {
+    task_type: "HM_JD_REVISE",
+    round: 3,
+    node_id: "n_hm_revise_r3",
+    label: "Hiring Manager Review Round 3",
+    inputs: { workflow_input_q8gs2ohgz: "message" }, // HR Response Message
+    json_input: "workflow_input_o66ljyr0o",
+    json_keys: REQ_JSON_KEYS,
+    reply: "json",
+    json_output: HM_REVIEW_R3_OUTPUT,
   },
 };
 
@@ -398,9 +415,9 @@ export function buildReviewedJson(source: Record<string, unknown>, r: Requisitio
   return JSON.stringify(out);
 }
 
-/** Hiring Manager Review Round 2 output (spec 04 §7.1): the updated requisition JSON. */
-export function buildHmUpdatedJsonOutput(source: Record<string, unknown>, r: Requisition): Record<string, string> {
-  return { [HM_REVIEW_R2_OUTPUT]: buildReviewedJson(source, r) };
+/** Hiring Manager Review Round 2 / 3 output (spec 04 §7.1, spec 06 §7.1): the updated requisition JSON, under the node's own output ID. */
+export function buildHmUpdatedJsonOutput(outputId: string, source: Record<string, unknown>, r: Requisition): Record<string, string> {
+  return { [outputId]: buildReviewedJson(source, r) };
 }
 
 /** The HR final check outputs (spec 03 §7.1, spec 05 §7.1), with the node's own output IDs. Bare values. */
