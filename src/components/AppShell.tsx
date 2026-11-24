@@ -64,7 +64,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { mode, systemMode, setMode } = useColorScheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuEl, setMenuEl] = useState<HTMLElement | null>(null);
-  const tasks = useApi(() => api.tasks.list("open"), [pathname], { pollMs: 5000 });
+  const tasks = useApi(() => api.tasks.list("open"), [pathname], { pollMs: 10000 });
   const openCount = tasks.data?.length ?? 0;
   const effective = mode === "system" ? systemMode : mode;
   const showSourcesToggle = process.env.NEXT_PUBLIC_SHOW_SOURCES === "true";

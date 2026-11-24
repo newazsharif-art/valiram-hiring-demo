@@ -24,7 +24,7 @@ function RequisitionsInner() {
   const { user } = useSession();
   const [filter, setFilter] = useState(params.get("status") ?? "all");
   const [q, setQ] = useState("");
-  const reqs = useApi(() => api.requisitions.list(), [], { pollMs: 5000 });
+  const reqs = useApi(() => api.requisitions.list(), [], { pollMs: 10000 });
 
   if (reqs.error) return <ErrorNote error={reqs.error} />;
   const all = reqs.data ?? [];

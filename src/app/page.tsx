@@ -10,8 +10,8 @@ import { taskChip, taskWhere } from "@/lib/tasks";
 
 export default function HomePage() {
   const { user } = useSession();
-  const reqs = useApi(() => api.requisitions.list(), [], { pollMs: 5000 });
-  const tasks = useApi(() => api.tasks.list("open"), [], { pollMs: 5000 });
+  const reqs = useApi(() => api.requisitions.list(), [], { pollMs: 10000 });
+  const tasks = useApi(() => api.tasks.list("open"), [], { pollMs: 10000 });
 
   if (reqs.error) return <ErrorNote error={reqs.error} />;
   if (!reqs.data || !tasks.data) return <Loading />;

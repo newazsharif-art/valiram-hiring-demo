@@ -153,8 +153,16 @@ export function resetDb(): Db {
  * On serverless hosting (Vercel) instances don't share memory and reset on cold start, so the
  * whole Db is kept as one JSON value in Upstash Redis when its REST env vars are set.
  * Without them (local dev) the store stays purely in memory.
+ *
+ * To keep Redis usage low (free plan), each instance caches the Db in memory and only downloads it
+ * again when the small version counter VER_KEY has moved, i.e. another instance saved a change.
+ * A request that changes nothing costs one tiny GET. To reset by hand in the Upstash console,
+ * delete both keys (`DEL valiram:db valiram:db:ver`).
  */
 const DB_KEY = "valiram:db";
+const VER_KEY = "valiram:db:ver";
+/** Version of the cached Db on this instance; undefined = nothing cached. */
+let cachedVer: number | undefined;
 let client: Redis | null | undefined;
 
 function redis(): Redis | null {
@@ -176,14 +184,29 @@ export function withStore<T>(fn: () => T | Promise<T>): Promise<T> {
   const r = redis();
   if (!r) return Promise.resolve().then(fn);
   const run = async () => {
-    g.__valiramDb = (await r.get<Db>(DB_KEY)) ?? seed();
+    const ver = Number((await r.get<number | string>(VER_KEY)) ?? 0);
+    if (cachedVer === undefined || cachedVer !== ver || !g.__valiramDb) {
+      g.__valiramDb = (await r.get<Db>(DB_KEY)) ?? seed();
+      cachedVer = ver;
+    }
     g.__valiramDb.opus_cases ??= {}; // Db saved before spec 01
     const before = JSON.stringify(g.__valiramDb);
     try {
       return await fn();
     } finally {
       const after = JSON.stringify(g.__valiramDb);
-      if (after !== before) await r.set(DB_KEY, after);
+      if (after !== before) {
+        try {
+          const p = r.pipeline();
+          p.set(DB_KEY, after);
+          p.incr(VER_KEY);
+          const [, next] = await p.exec<[unknown, number]>();
+          cachedVer = Number(next);
+        } catch (e) {
+          cachedVer = undefined; // the cache may now differ from Redis: reload next time
+          throw e;
+        }
+      }
     }
   };
   const p = queue.then(run, run);

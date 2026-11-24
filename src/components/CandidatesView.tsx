@@ -15,10 +15,10 @@ export function CandidatesView({ reqId }: { reqId?: string }) {
   const router = useRouter();
   const { user } = useSession();
   const [band, setBand] = useState<"all" | Band>("all");
-  const reqs = useApi(() => api.requisitions.list(), [], { pollMs: 5000 });
+  const reqs = useApi(() => api.requisitions.list(), [], { pollMs: 10000 });
   const choices = (reqs.data ?? []).filter((r) => r.status === "Live" || r.shortlist);
   const currentId = reqId ?? choices.find((r) => r.shortlist)?.id ?? choices[0]?.id;
-  const cands = useApi(() => (currentId ? api.requisitions.candidates(currentId) : Promise.resolve([])), [currentId], { pollMs: 5000 });
+  const cands = useApi(() => (currentId ? api.requisitions.candidates(currentId) : Promise.resolve([])), [currentId], { pollMs: 10000 });
 
   if (user.role === "HIRING_MANAGER") {
     return (

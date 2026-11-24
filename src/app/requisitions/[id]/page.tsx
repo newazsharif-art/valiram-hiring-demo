@@ -49,8 +49,8 @@ export default function RequisitionDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useSession();
   const [tab, setTab] = useState(0);
-  const req = useApi(() => api.requisitions.get(id), [id], { pollMs: 2500 });
-  const tasks = useApi(() => api.tasks.list("open"), [id], { pollMs: 5000 });
+  const req = useApi(() => api.requisitions.get(id), [id], { pollMs: 5000 });
+  const tasks = useApi(() => api.tasks.list("open"), [id], { pollMs: 10000 });
 
   if (req.error) return <ErrorNote error={req.error} />;
   if (!req.data) return <Loading />;

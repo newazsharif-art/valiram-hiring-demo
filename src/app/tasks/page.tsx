@@ -39,8 +39,8 @@ export default function TasksPage() {
   const { user } = useSession();
   const router = useRouter();
   const [view, setView] = useState(0);
-  const tasks = useApi(() => api.tasks.list("all"), [], { pollMs: 5000 });
-  const reqs = useApi(() => api.requisitions.list(), [], { pollMs: 5000 });
+  const tasks = useApi(() => api.tasks.list("all"), [], { pollMs: 10000 });
+  const reqs = useApi(() => api.requisitions.list(), [], { pollMs: 10000 });
 
   if (user.role === "HR_ADMIN") {
     return (

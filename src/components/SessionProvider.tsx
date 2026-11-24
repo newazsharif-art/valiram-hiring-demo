@@ -52,7 +52,8 @@ interface ApiState<T> {
 
 /**
  * Small data hook around the typed API client. Refetches when the role changes,
- * when `deps` change, after `bump()`, and every `pollMs` if given.
+ * when `deps` change, after `bump()`, and every `pollMs` if given. Polling pauses while the
+ * browser tab is hidden (each request reads Redis) and refetches once when the tab is shown again.
  */
 export function useApi<T>(fn: () => Promise<T>, deps: unknown[], opts?: { pollMs?: number }) {
   const { version } = useSession();
@@ -78,8 +79,17 @@ export function useApi<T>(fn: () => Promise<T>, deps: unknown[], opts?: { pollMs
   const poll = opts?.pollMs;
   useEffect(() => {
     if (!poll) return;
-    const id = setInterval(() => void load(true), poll);
-    return () => clearInterval(id);
+    const id = setInterval(() => {
+      if (!document.hidden) void load(true);
+    }, poll);
+    const onVisible = () => {
+      if (!document.hidden) void load(true);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [poll, load]);
 
   return { ...state, reload: () => load(true) };
