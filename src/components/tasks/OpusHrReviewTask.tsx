@@ -1,8 +1,9 @@
 "use client";
 /**
- * "Review requisition" for an HR final check task delivered by the real Opus webhook (spec 03 §8, spec 05 §8):
+ * "Review requisition" for an HR final check task delivered by the real Opus webhook (spec 03 §8, spec 05 §8, spec 07 §8):
  * the review history of this and earlier rounds (read only), the requisition form prefilled from Opus, and the decision.
  * Send decision posts the reviewed JSON, the pass flag and the HR message to the Opus callback API.
+ * Round 3 is the last round: the second option is "Reject requisition", which closes the requisition as Rejected.
  */
 import Link from "next/link";
 import { useState } from "react";
@@ -25,7 +26,7 @@ import {
 import { formatMyt, waitingFor } from "@/lib/format";
 import { ClosedBanner, toSubmitError, type SubmitState } from "./common";
 
-type Decision = "" | "approve" | "return";
+type Decision = "" | "approve" | "return" | "reject";
 
 const omit = (e: Record<string, string>, key: string) => Object.fromEntries(Object.entries(e).filter(([k]) => k !== key));
 
@@ -40,7 +41,9 @@ export function OpusHrReviewTask({ task, requisition: r, onChanged }: { task: Ta
     .filter((x) => x.round <= round && (x.precheck || x.hm || (x.round < round && x.hr)))
     .sort((a, b) => a.round - b.round);
   const nodeLabel = typeof task.inputs.node_label === "string" && task.inputs.node_label ? task.inputs.node_label : `Round ${round} · HR final check`;
+  const lastRound = round >= 3;
   const nextRound = round + 1 >= 3 ? `round ${round + 1} of 3 follows, the last round` : `round ${round + 1} of 3 follows`;
+  const second: Exclude<Decision, "" | "approve"> = lastRound ? "reject" : "return";
   const [form, setForm] = useState<RequisitionForm>(prefill ? formFromInput(prefill) : formFromRequisition(r));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [decision, setDecision] = useState<Decision>("");
@@ -58,7 +61,9 @@ export function OpusHrReviewTask({ task, requisition: r, onChanged }: { task: Ta
     const input = formToInput(form);
     const errs = validateForm(input);
     if (!decision) errs.decision = "Choose a decision.";
-    if (decision === "return" && !comment.trim()) errs.hr_comments = "Add a comment so the hiring manager knows what to change.";
+    if (decision === second && !comment.trim()) {
+      errs.hr_comments = lastRound ? "Add a comment explaining why the requisition is rejected." : "Add a comment so the hiring manager knows what to change.";
+    }
     setErrors(errs);
     if (Object.keys(errs).length) {
       setState({ kind: "error", message: "Please fix the highlighted fields." });
@@ -83,7 +88,7 @@ export function OpusHrReviewTask({ task, requisition: r, onChanged }: { task: Ta
       <PageHeader
         crumbs={[{ label: "My tasks", href: "/tasks" }, { label: "Review requisition" }]}
         title={`Review requisition · ${r.role}, ${r.store}`}
-        chips={<StatusChip tone="hr" label={`Round ${round} of 3`} />}
+        chips={<StatusChip tone="hr" label={lastRound ? `Round ${round} of 3 · last round` : `Round ${round} of 3`} />}
         subtitle={`${r.id} · Hiring manager ${r.hm_name} · Assigned to ${task.assignee_name}`}
       />
 
@@ -104,6 +109,13 @@ export function OpusHrReviewTask({ task, requisition: r, onChanged }: { task: Ta
         <Alert severity="warning" role="status">
           <AlertTitle sx={{ fontWeight: 500 }}>Returned to {r.hm_name} ({nextRound}).</AlertTitle>
           Sent to Opus with your message. The hiring manager gets a task when Opus reaches the next review step. <NextLink href="/tasks">Next task</NextLink>
+        </Alert>
+      )}
+      {result === "reject" && (
+        <Alert severity="error" role="status">
+          <AlertTitle sx={{ fontWeight: 500 }}>Requisition rejected after round 3.</AlertTitle>
+          Sent to Opus with your message. Nothing was posted. {r.hm_name} was notified and can copy it to a new requisition.{" "}
+          <NextLink href={`/requisitions/${r.id}`}>View the requisition</NextLink> · <NextLink href="/tasks">Next task</NextLink>
         </Alert>
       )}
       {state.kind === "closed" && <ClosedBanner reqId={r.id} />}
@@ -168,7 +180,14 @@ export function OpusHrReviewTask({ task, requisition: r, onChanged }: { task: Ta
             >
               {[
                 { v: "approve", t: "Approve and publish", d: "Generate the job posting and mark the JD live.", c: "success.main" },
-                { v: "return", t: "Return to hiring manager", d: `They revise; ${nextRound}. Message required.`, c: "error.main" },
+                lastRound
+                  ? {
+                      v: "reject",
+                      t: "Reject requisition",
+                      d: "This is the last round: the requisition closes as Rejected and nothing is posted. The hiring manager can copy it to a new requisition. Message required.",
+                      c: "error.main",
+                    }
+                  : { v: "return", t: "Return to hiring manager", d: `They revise; ${nextRound}. Message required.`, c: "error.main" },
               ].map((o) => (
                 <FormControlLabel
                   key={o.v}
@@ -193,7 +212,7 @@ export function OpusHrReviewTask({ task, requisition: r, onChanged }: { task: Ta
             )}
             <TextField
               id="hr-message"
-              label={decision === "return" ? "HR Response Message (required)" : "HR Response Message (optional)"}
+              label={decision === second ? "HR Response Message (required)" : "HR Response Message (optional)"}
               multiline
               minRows={3}
               value={comment}
@@ -203,7 +222,7 @@ export function OpusHrReviewTask({ task, requisition: r, onChanged }: { task: Ta
               }}
               error={!!errors.hr_comments}
               helperText={errors.hr_comments ?? "Sent to Opus with your decision."}
-              required={decision === "return"}
+              required={decision === second}
             />
             {state.kind === "error" && <Alert severity="error">{state.message}</Alert>}
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, justifyContent: "flex-end" }}>

@@ -44,9 +44,11 @@ export function flow1Steps(r: Requisition): FlowStep[] {
       s[4] = { ...s[4], state: "done", sub: "Slack #recruitment notified" };
       break;
     case "Rejected": {
+      // The Opus path has no AI pre-check after round 1 (spec 07 §9): no pre-check in the last round means HR rejected it.
       const pre = last?.precheck;
-      s[1] = { ...s[1], state: pre?.pass ? "done" : "failed", sub: pre?.pass ? `Passed in round ${r.round}` : `Issues in round ${r.round}` };
-      if (pre?.pass) s[2] = { ...s[2], state: "failed", sub: `Not approved in round ${r.round}` };
+      const prePassed = !pre || pre.pass;
+      s[1] = { ...s[1], state: prePassed ? "done" : "failed", sub: prePassed ? (pre ? `Passed in round ${r.round}` : "Passed") : `Issues in round ${r.round}` };
+      if (prePassed) s[2] = { ...s[2], state: "failed", sub: `Not approved in round ${r.round}` };
       s[4] = { ...s[4], state: "failed", sub: `${t("Rejected") ?? ""} · copy to a new requisition` };
       break;
     }

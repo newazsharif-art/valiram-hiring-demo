@@ -202,7 +202,7 @@ The screen posts `{ requisition, decision, hr_comments? }`. In round 3 `decision
 - **Approve**: `opusHrDecided()` unchanged → **Live** with the posting PDF; review round 3 `outcome = "approved"`. Task label "Approved" / "Approved with edits".
 - **Reject**: new branch in `opusHrDecided()` when `round >= MAX_ROUNDS` (3):
   - HR's values saved; review round 3 `hr = { decision: "reject", by, at, comments, edited }`; new version "Edits during HR review" if anything changed.
-  - Review round 3 `outcome = "returned"` (the existing review outcome for "not approved"; the requisition status carries the rejection).
+  - Review round 3 `outcome = "rejected"` (the schema's existing value, as in the seeded rejected requisitions).
   - `status = "Rejected"`, `stage_times.Rejected = now`, `completed_at = now`. `round` stays 3; no new review is added.
   - Activity: "<HR> rejected the requisition (round 3): "<comment>"" and "Not approved after round 3; closed as Rejected. <HM> notified." (the second line matches the simulator's wording).
   - Task: label "Rejected", title "Verified JD · rejected" (the existing simulator labels).

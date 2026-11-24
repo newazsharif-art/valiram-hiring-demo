@@ -236,7 +236,8 @@ export function opusHrReceived(r: Requisition, round: number, taskId: string, hr
 /**
  * HR's decision was accepted by Opus (callback 200, spec 03 §7.4–7.6). HR's field values are saved for
  * both decisions. Approve → job posting generated and Live at once (no simulator job). Return → round + 1,
- * ReturnedToHm; the HM task arrives through the next webhook.
+ * ReturnedToHm; the HM task arrives through the next webhook. In the last round (spec 07 §7.3) not approving
+ * closes the requisition as Rejected.
  */
 export function opusHrDecided(r: Requisition, next: Requisition, actor: string, approve: boolean, comments: string, changed: string[]) {
   const t = nowIso();
@@ -259,6 +260,16 @@ export function opusHrDecided(r: Requisition, next: Requisition, actor: string, 
     return;
   }
   rv.outcome = "returned";
+  if (round >= MAX_ROUNDS) {
+    rv.outcome = "rejected";
+    log(r, `${actor} rejected the requisition (round ${round})${comments ? `: "${comments}"` : "."}`);
+    if (changed.length) log(r, `Changed: ${changed.join(", ")}.`);
+    r.status = "Rejected";
+    mark(r, "Rejected");
+    r.completed_at = t;
+    log(r, `Not approved after round ${MAX_ROUNDS}; closed as Rejected. ${r.hm_name} notified.`);
+    return;
+  }
   log(r, `${actor} returned the requisition to ${r.hm_name} (round ${round})${comments ? `: "${comments}"` : "."}`);
   if (changed.length) log(r, `Changed: ${changed.join(", ")}.`);
   r.round = round + 1;

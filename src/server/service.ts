@@ -289,8 +289,9 @@ const FIELD_LABELS: [keyof Requisition, string][] = [
  * - HM review round 1 (spec 02 §7). Body: { requisition }. 15 bare outputs; requisition → With HR.
  * - HM review round 2 (spec 04 §7). Body: { requisition }. One output: the requisition JSON as received,
  *   with the HM's values; requisition → With HR (same round).
- * - HR final check, rounds 1 and 2 (spec 03 §7, spec 05 §7). Body: { requisition, decision: "approve" | "return", hr_comments? }.
- *   Reviewed JSON + pass flag + message; Approve → Live, Return → Returned to HM next round.
+ * - HR final check, rounds 1–3 (spec 03 §7, spec 05 §7, spec 07 §7). Body: { requisition, decision, hr_comments? }.
+ *   Reviewed JSON + pass flag + message; Approve → Live, Return → Returned to HM next round. In the last round
+ *   the second decision is "reject" ("return" accepted as an alias) and closes the requisition as Rejected.
  */
 async function completeOpusTask(d: Db, t: TaskRecord, r: Requisition, body: Record<string, unknown>) {
   if (t.task_type !== "HM_JD_REVISE" && t.task_type !== "HR_JD_CHECK") throw new ApiError(400, "unsupported", "This Opus task type is not supported yet.");
@@ -298,11 +299,15 @@ async function completeOpusTask(d: Db, t: TaskRecord, r: Requisition, body: Reco
   if (t.status === "done") throw new ApiError(409, "already_done", "This task was already submitted.");
   const isHr = t.task_type === "HR_JD_CHECK";
   // HR final check (spec 03 §7.3): decision first, then the comment, then the fields.
+  const lastRound = (t.round ?? r.round) >= MAX_ROUNDS;
   const decision = body.decision;
   const comments = typeof body.hr_comments === "string" ? body.hr_comments.trim() : "";
   if (isHr) {
-    if (decision !== "approve" && decision !== "return") throw new ApiError(400, "invalid", "Choose a decision", { field: "decision" });
-    if (decision === "return" && !comments) throw new ApiError(400, "comment_required", "Add a comment so the hiring manager knows what to change.", { field: "hr_comments" });
+    const allowed = lastRound ? ["approve", "reject", "return"] : ["approve", "return"];
+    if (typeof decision !== "string" || !allowed.includes(decision)) throw new ApiError(400, "invalid", "Choose a decision", { field: "decision" });
+    if (decision !== "approve" && !comments) {
+      throw new ApiError(400, "comment_required", lastRound ? "Add a comment explaining why the requisition is rejected." : "Add a comment so the hiring manager knows what to change.", { field: "hr_comments" });
+    }
   }
   const input = RequisitionInputSchema.parse(body.requisition);
 
@@ -355,9 +360,10 @@ async function completeOpusTask(d: Db, t: TaskRecord, r: Requisition, body: Reco
     const edited = !!r.reviews.find((x) => x.round === roundAtDecision)?.hr?.edited;
     t.status = "done";
     t.completed_at = nowIso();
-    t.outcome = approve ? "approve" : "return";
-    t.outcome_label = approve ? (edited ? "Approved with edits" : "Approved") : "Returned";
-    t.title = approve ? "Reviewed requisition · approved" : "Reviewed requisition · returned to HM";
+    const rejected = !approve && roundAtDecision >= MAX_ROUNDS;
+    t.outcome = approve ? "approve" : rejected ? "reject" : "return";
+    t.outcome_label = approve ? (edited ? "Approved with edits" : "Approved") : rejected ? "Rejected" : "Returned";
+    t.title = approve ? "Reviewed requisition · approved" : rejected ? "Reviewed requisition · rejected" : "Reviewed requisition · returned to HM";
     return { task: toPublicTask(t), requisition: r };
   }
   opusResubmitted(r, next, t.assignee_name, changed);

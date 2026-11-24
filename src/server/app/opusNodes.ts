@@ -1,5 +1,5 @@
 /**
- * Real Opus Off-Platform nodes the app handles (spec 02, spec 03, spec 04, spec 05, spec 06).
+ * Real Opus Off-Platform nodes the app handles (specs 02–07).
  * Opus doesn't say which node sent a webhook, so each node has its own webhook URL:
  *   POST /api/opus/webhook?node=<key>
  * Input and output IDs live here, so a Builder change only touches this file.
@@ -90,6 +90,13 @@ export const HR_REVIEW_R2_OUTPUTS: HrReviewOutputs = {
   message: "workflow_output_a6harg7au",
 };
 
+/** HR Approval Round 3 outputs (spec 07 §7.1). Pass Status is not nullable here. */
+export const HR_REVIEW_R3_OUTPUTS: HrReviewOutputs = {
+  reviewed_json: "workflow_output_agrmx0byl",
+  pass_status: "f2e99a70-7962-4d19-92c4-3770bc5c666a",
+  message: "workflow_output_eiqqlyry3",
+};
+
 /** Hiring Manager Review Round 2 output "Updated Json" (json_string, not nullable; spec 04 §7.1). */
 export const HM_REVIEW_R2_OUTPUT = "workflow_output_0256au6te";
 
@@ -173,6 +180,16 @@ export const OPUS_NODES: Record<string, OpusNode> = {
     json_keys: REQ_JSON_KEYS,
     reply: "json",
     json_output: HM_REVIEW_R3_OUTPUT,
+  },
+  hr_review_r3: {
+    task_type: "HR_JD_CHECK",
+    round: 3,
+    node_id: "n_hr_verify_r3",
+    label: "HR Approval Round 3",
+    json_input: "workflow_input_i7ksgqu03",
+    json_keys: REQ_JSON_KEYS,
+    reply: "hr_decision",
+    outputs: HR_REVIEW_R3_OUTPUTS,
   },
 };
 
